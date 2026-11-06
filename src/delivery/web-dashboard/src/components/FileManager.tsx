@@ -18,7 +18,8 @@ import {
   FilePlus,
   Code2,
   ChevronDown,
-  FolderOpen
+  FolderOpen,
+  Upload
 } from 'lucide-react';
 import { api } from '../services/api-client.js';
 
@@ -58,6 +59,12 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
   // Rename Modal
   const [renamingItem, setRenamingItem] = useState<FileItemData | null>(null);
   const [renameTargetName, setRenameTargetName] = useState('');
+
+  // Upload State & Drag Drop
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgressMsg, setUploadProgressMsg] = useState<string | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Desktop IDE Bridge Integration: Available in Electron or when running locally on host
   const isDesktop = typeof window !== 'undefined' && (
@@ -275,6 +282,63 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
     }
   };
 
+  const handleUploadFiles = async (selectedFiles: FileList | File[]) => {
+    if (!selectedFiles || selectedFiles.length === 0) return;
+
+    setIsUploading(true);
+    setUploadProgressMsg(`Subiendo ${selectedFiles.length} archivo(s)...`);
+    setErrorMessage(null);
+
+    try {
+      const formData = new FormData();
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        if (file) {
+          formData.append('files', file);
+        }
+      }
+
+      const res = await api.upload<{ message: string; files: Array<{ filename: string; size: number }> }>(
+        `/servers/${serverId}/files/upload?path=${encodeURIComponent(currentPath)}`,
+        formData
+      );
+
+      setIdeFeedbackMsg(res.message || 'Archivos subidos exitosamente');
+      setTimeout(() => setIdeFeedbackMsg(null), 3500);
+      await fetchFiles();
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error al subir archivo(s)');
+    } finally {
+      setIsUploading(false);
+      setUploadProgressMsg(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleUploadFiles(e.dataTransfer.files);
+    }
+  };
+
   const formatSize = (bytes: number): string => {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -401,6 +465,30 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
             <span className="hidden sm:inline">Archivo</span>
           </button>
 
+          {/* Subir archivo */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0) {
+                handleUploadFiles(e.target.files);
+                e.target.value = '';
+              }
+            }}
+            multiple
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+            title="Subir archivos a esta carpeta (o arrastra y suelta)"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Subir</span>
+          </button>
+
           {/* Desktop IDE Selector Button & Dropdown */}
           {isDesktop && (
             <div className="relative inline-flex items-center" ref={ideMenuRef}>
@@ -496,8 +584,39 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
         </div>
       )}
 
+      {uploadProgressMsg && (
+        <div
+          className={`p-3 border-b text-xs flex items-center gap-2 transition-colors ${
+            uploadProgressMsg.startsWith('Error')
+              ? 'bg-rose-950/60 border-rose-500/40 text-rose-200'
+              : 'bg-emerald-950/60 border-emerald-500/40 text-emerald-200'
+          }`}
+        >
+          {isUploading ? (
+            <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin shrink-0" />
+          ) : (
+            <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
+          )}
+          <span>{uploadProgressMsg}</span>
+        </div>
+      )}
+
       {/* Files Table / List */}
-      <div className="flex-1 overflow-y-auto">
+      <div
+        className="flex-1 overflow-y-auto relative"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {isDraggingOver && (
+          <div className="absolute inset-0 z-30 bg-nebula-900/90 border-2 border-dashed border-emerald-400/80 rounded-xl flex flex-col items-center justify-center pointer-events-none backdrop-blur-xs animate-in fade-in duration-150">
+            <Upload className="w-10 h-10 text-emerald-400 animate-bounce mb-2" />
+            <p className="text-sm font-semibold text-white">Suelta los archivos aquí para subirlos</p>
+            <p className="text-xs text-slate-400 mt-1 font-mono">
+              Destino: /{currentPath || 'raíz'}
+            </p>
+          </div>
+        )}
         {isLoading ? (
           <div className="py-20 text-center text-xs font-mono text-slate-500">
             Cargando archivos del servidor...

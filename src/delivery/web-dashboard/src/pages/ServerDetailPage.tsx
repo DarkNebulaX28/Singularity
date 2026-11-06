@@ -579,6 +579,7 @@ export const ServerDetailPage: React.FC<ServerDetailPageProps> = ({
           <div className="h-full overflow-y-auto">
             <InstalledContentList
               serverId={server.id}
+              loader={server.loader}
               onExploreCatalog={() => onNavigateToCatalog?.()}
             />
           </div>

@@ -108,7 +108,7 @@ export class ContentInstallerService {
     }
   }
 
-  async getManifest(instanceId: string): Promise<InstanceManifest> {
+  async getStoredManifest(instanceId: string): Promise<InstanceManifest> {
     const manifestPath = this.getManifestPath(instanceId);
     try {
       const raw = await fs.readFile(manifestPath, 'utf8');
@@ -120,6 +120,64 @@ export class ContentInstallerService {
         updatedAt: new Date().toISOString()
       };
     }
+  }
+
+  async getManifest(instanceId: string): Promise<InstanceManifest> {
+    const baseManifest = await this.getStoredManifest(instanceId);
+
+    // Scan actual files on disk in mods/, plugins/, and datapacks/
+    // to discover any custom user-uploaded .jar or .zip files
+    const instanceDir = this.getInstanceDir(instanceId);
+    const trackedFiles = new Set(baseManifest.installedItems.map((item) => item.fileName.toLowerCase()));
+    const customItems: InstalledItem[] = [];
+
+    const foldersToScan: Array<{ folder: string; type: ProjectType }> = [
+      { folder: 'plugins', type: 'plugin' },
+      { folder: 'mods', type: 'mod' },
+      { folder: 'datapacks', type: 'datapack' }
+    ];
+
+    for (const { folder, type } of foldersToScan) {
+      const folderPath = path.join(instanceDir, folder);
+      try {
+        const entries = await fs.readdir(folderPath, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isFile()) {
+            const lowerName = entry.name.toLowerCase();
+            const isValidExt = type === 'datapack' ? lowerName.endsWith('.zip') : lowerName.endsWith('.jar');
+            if (isValidExt && !trackedFiles.has(lowerName)) {
+              let mtime = new Date().toISOString();
+              try {
+                const stat = await fs.stat(path.join(folderPath, entry.name));
+                mtime = stat.mtime.toISOString();
+              } catch {
+                // Ignore stat error
+              }
+
+              customItems.push({
+                id: `custom_${entry.name}`,
+                projectId: `custom_${entry.name}`,
+                providerId: 'custom',
+                projectType: type,
+                versionId: 'local',
+                versionNumber: 'Personalizado',
+                fileName: entry.name,
+                destinationFolder: folder,
+                installedAt: mtime
+              });
+              trackedFiles.add(lowerName);
+            }
+          }
+        }
+      } catch {
+        // Folder might not exist yet, ignore
+      }
+    }
+
+    return {
+      ...baseManifest,
+      installedItems: [...baseManifest.installedItems, ...customItems]
+    };
   }
 
   async saveManifest(manifest: InstanceManifest): Promise<void> {
@@ -195,7 +253,7 @@ export class ContentInstallerService {
     };
 
     // Update manifest
-    const manifest = await this.getManifest(request.instanceId);
+    const manifest = await this.getStoredManifest(request.instanceId);
     const filtered = manifest.installedItems.filter(
       (item) => item.projectId !== request.projectId
     );
@@ -349,7 +407,7 @@ export class ContentInstallerService {
       };
 
       // Update manifest
-      const manifest = await this.getManifest(request.instanceId);
+      const manifest = await this.getStoredManifest(request.instanceId);
       const filtered = manifest.installedItems.filter(
         (item) => item.projectId !== request.projectId
       );
@@ -387,7 +445,9 @@ export class ContentInstallerService {
       // Ignore if already deleted from disk
     }
 
-    const updatedItems = manifest.installedItems.filter((item) => item.projectId !== projectId);
+    const updatedItems = manifest.installedItems.filter(
+      (item) => item.projectId !== projectId && item.providerId !== 'custom'
+    );
     await this.saveManifest({
       instanceId,
       installedItems: updatedItems,

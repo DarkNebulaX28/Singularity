@@ -637,4 +637,49 @@ export const serverRoutes: FastifyPluginAsync<ServerRoutesOptions> = async (fast
       return reply.status(400).send({ error: message });
     }
   });
+
+  // Upload file(s) via multipart/form-data (OPERATOR, ADMIN)
+  fastify.post<{
+    Params: { id: string };
+    Querystring: { path?: string };
+  }>('/:id/files/upload', { preHandler: [requireRole(['ADMIN', 'OPERATOR'])] }, async (request, reply) => {
+    const serverId = request.params.id;
+    const targetFolder = (request.query.path || '').trim();
+
+    if (!request.isMultipart()) {
+      return reply.status(400).send({ error: 'La petición debe ser multipart/form-data' });
+    }
+
+    try {
+      const parts = request.files();
+      const uploaded: Array<{ filename: string; path: string; size: number }> = [];
+
+      for await (const part of parts) {
+        const filename = part.filename;
+        if (!filename) continue;
+
+        const cleanFilename = path.basename(filename);
+        const relativePath = targetFolder ? `${targetFolder}/${cleanFilename}` : cleanFilename;
+
+        const { bytesWritten } = await fileManagerService.saveFileStream(serverId, relativePath, part.file);
+        uploaded.push({
+          filename: cleanFilename,
+          path: relativePath,
+          size: bytesWritten
+        });
+      }
+
+      if (uploaded.length === 0) {
+        return reply.status(400).send({ error: 'No se recibieron archivos válidos para subir' });
+      }
+
+      return reply.status(201).send({
+        message: `Se subieron ${uploaded.length} archivo(s) exitosamente`,
+        files: uploaded
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al subir archivo(s)';
+      return reply.status(400).send({ error: message });
+    }
+  });
 };

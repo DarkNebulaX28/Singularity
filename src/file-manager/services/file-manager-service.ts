@@ -1,6 +1,8 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, statSync, createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import type { Readable } from 'node:stream';
 import type { FileItem, FileContentResult } from '../models/file-item.js';
 import type { ServerLifecycleService } from '../../servers/services/server-lifecycle.js';
 
@@ -118,6 +120,29 @@ export class FileManagerService {
     // Ensure parent directory exists
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, content, 'utf8');
+  }
+
+  /**
+   * Streams a binary file directly to disk, ensuring memory efficiency for large mods,
+   * plugins, modpacks, and world saves while enforcing path safety boundaries.
+   */
+  async saveFileStream(serverId: string, relativePath: string, stream: NodeJS.ReadableStream | Readable): Promise<{ bytesWritten: number }> {
+    const filePath = this.resolveSafePath(serverId, relativePath);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    const writeStream = createWriteStream(filePath);
+    await pipeline(stream as any, writeStream);
+    const stat = await fs.stat(filePath);
+    return { bytesWritten: stat.size };
+  }
+
+  /**
+   * Saves a binary Buffer safely to disk.
+   */
+  async saveFileBuffer(serverId: string, relativePath: string, buffer: Buffer): Promise<{ bytesWritten: number }> {
+    const filePath = this.resolveSafePath(serverId, relativePath);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, buffer);
+    return { bytesWritten: buffer.length };
   }
 
   async createDirectory(serverId: string, relativePath: string): Promise<void> {

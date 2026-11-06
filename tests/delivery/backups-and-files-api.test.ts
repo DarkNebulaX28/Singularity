@@ -113,6 +113,46 @@ describe('Delivery API > Backups & File Manager Endpoints', () => {
       });
       expect(delRes.statusCode).toBe(200);
     });
+
+    it('should upload files via multipart/form-data to destination folder', async () => {
+      const boundary = '----WebKitFormBoundaryUploadTest123';
+      const fileContent = 'custom-plugin-binary-data';
+      const payload = [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="files"; filename="CustomPlugin.jar"',
+        'Content-Type: application/java-archive',
+        '',
+        fileContent,
+        `--${boundary}--`
+      ].join('\r\n');
+
+      const uploadRes = await app.inject({
+        method: 'POST',
+        url: `/api/servers/${serverId}/files/upload?path=plugins`,
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': `multipart/form-data; boundary=${boundary}`
+        },
+        payload
+      });
+
+      expect(uploadRes.statusCode).toBe(201);
+      const data = uploadRes.json();
+      expect(data.files).toBeDefined();
+      expect(data.files.length).toBe(1);
+      expect(data.files[0].filename).toBe('CustomPlugin.jar');
+      expect(data.files[0].path).toBe('plugins/CustomPlugin.jar');
+
+      // Verify file is present via list files
+      const listRes = await app.inject({
+        method: 'GET',
+        url: `/api/servers/${serverId}/files?path=plugins`,
+        headers: { authorization: `Bearer ${token}` }
+      });
+      expect(listRes.statusCode).toBe(200);
+      const files = listRes.json();
+      expect(files.some((f: any) => f.name === 'CustomPlugin.jar')).toBe(true);
+    });
   });
 
   describe('Backups API', () => {

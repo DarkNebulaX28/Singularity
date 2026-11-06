@@ -9,6 +9,7 @@ const __dirname = path.dirname(__filename);
 import cors from '@fastify/cors';
 import fastifyWebsocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
+import fastifyMultipart from '@fastify/multipart';
 import { DbClient } from '../../auth-identity/database/db-client.js';
 import { SqliteUserRepository } from '../../auth-identity/repositories/sqlite-user-repository.js';
 import { AuthService } from '../../auth-identity/services/auth-service.js';
@@ -65,6 +66,13 @@ export async function buildServer(options: ServerOptions = {}): Promise<FastifyI
   await fastify.register(cors, {
     origin: true,
     credentials: true
+  });
+
+  await fastify.register(fastifyMultipart, {
+    limits: {
+      fileSize: 1024 * 1024 * 1024, // 1 GB max file upload
+      files: 20
+    }
   });
 
   await fastify.register(fastifyWebsocket);

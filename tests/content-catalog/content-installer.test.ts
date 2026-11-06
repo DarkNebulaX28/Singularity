@@ -21,6 +21,9 @@ describe('ContentInstallerService', () => {
   let installer: ContentInstallerService;
 
   beforeEach(async () => {
+    try {
+      await fs.rm(testServersDir, { recursive: true, force: true });
+    } catch {}
     await fs.mkdir(path.join(instanceDir, 'mods'), { recursive: true });
     await fs.mkdir(path.join(instanceDir, 'plugins'), { recursive: true });
     await fs.mkdir(path.join(instanceDir, 'datapacks'), { recursive: true });
@@ -167,5 +170,36 @@ describe('ContentInstallerService', () => {
       .then(() => true)
       .catch(() => false);
     expect(fileStillExists).toBe(false);
+  });
+
+  it('should discover custom user-uploaded .jar files on disk and allow uninstalling them', async () => {
+    // Manually place custom plugin and mod on disk
+    await fs.writeFile(path.join(instanceDir, 'plugins', 'CustomAuth.jar'), 'custom-auth-bytes');
+    await fs.writeFile(path.join(instanceDir, 'mods', 'CustomWeaponMod.jar'), 'custom-weapon-bytes');
+
+    const manifest = await installer.getManifest(instanceId);
+    const customPlugin = manifest.installedItems.find((i) => i.fileName === 'CustomAuth.jar');
+    const customMod = manifest.installedItems.find((i) => i.fileName === 'CustomWeaponMod.jar');
+
+    expect(customPlugin).toBeDefined();
+    expect(customPlugin?.providerId).toBe('custom');
+    expect(customPlugin?.projectType).toBe('plugin');
+    expect(customPlugin?.versionNumber).toBe('Personalizado');
+
+    expect(customMod).toBeDefined();
+    expect(customMod?.providerId).toBe('custom');
+    expect(customMod?.projectType).toBe('mod');
+    expect(customMod?.versionNumber).toBe('Personalizado');
+
+    // Uninstall custom plugin
+    await installer.uninstall(instanceId, customPlugin!.projectId);
+    const manifestAfter = await installer.getManifest(instanceId);
+    expect(manifestAfter.installedItems.some((i) => i.fileName === 'CustomAuth.jar')).toBe(false);
+
+    const pluginExists = await fs
+      .access(path.join(instanceDir, 'plugins', 'CustomAuth.jar'))
+      .then(() => true)
+      .catch(() => false);
+    expect(pluginExists).toBe(false);
   });
 });

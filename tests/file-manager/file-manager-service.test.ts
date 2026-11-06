@@ -100,4 +100,22 @@ describe('FileManager Domain > FileManagerService', () => {
     // Attempting to delete server root throws
     await expect(service.deleteFileOrDirectory(instanceId, '')).rejects.toThrow('No se puede eliminar la raíz');
   });
+
+  it('should save file streams and binary buffers safely', async () => {
+    const { Readable } = await import('node:stream');
+    const stream = Readable.from([Buffer.from('binary-jar-payload-123')]);
+
+    const streamRes = await service.saveFileStream(instanceId, 'plugins/TestPlugin.jar', stream);
+    expect(streamRes.bytesWritten).toBe(Buffer.from('binary-jar-payload-123').length);
+
+    const bufferPayload = Buffer.from('buffer-mod-payload-456');
+    const bufRes = await service.saveFileBuffer(instanceId, 'mods/TestMod.jar', bufferPayload);
+    expect(bufRes.bytesWritten).toBe(bufferPayload.length);
+
+    const plugins = await service.listFiles(instanceId, 'plugins');
+    expect(plugins.some((p) => p.name === 'TestPlugin.jar')).toBe(true);
+
+    const mods = await service.listFiles(instanceId, 'mods');
+    expect(mods.some((m) => m.name === 'TestMod.jar')).toBe(true);
+  });
 });

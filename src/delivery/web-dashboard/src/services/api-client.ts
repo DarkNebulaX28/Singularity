@@ -25,9 +25,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     ...(options.headers as Record<string, string>)
   };
 
-  // Only set Content-Type: application/json if there is an actual body payload
+  // Only set Content-Type: application/json if there is an actual body payload and it's not FormData
   if (options.body !== undefined && options.body !== null) {
-    if (!headers['Content-Type']) {
+    if (!(options.body instanceof FormData) && !headers['Content-Type']) {
       headers['Content-Type'] = 'application/json';
     }
   }
@@ -85,6 +85,11 @@ export const api = {
     request<T>(url, {
       method: 'PUT',
       body: body !== undefined && body !== null ? JSON.stringify(body) : undefined
+    }),
+  upload: <T>(url: string, formData: FormData) =>
+    request<T>(url, {
+      method: 'POST',
+      body: formData
     }),
   delete: <T>(url: string) => request<T>(url, { method: 'DELETE' })
 };
