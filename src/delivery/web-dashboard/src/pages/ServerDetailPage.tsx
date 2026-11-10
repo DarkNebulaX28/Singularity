@@ -52,6 +52,7 @@ export const ServerDetailPage: React.FC<ServerDetailPageProps> = ({
   const [actionErrorMsg, setActionErrorMsg] = useState<string | null>(null);
   const [copiedSftp, setCopiedSftp] = useState(false);
   const [players, setPlayers] = useState<PlayerData[]>([]);
+  const [metrics, setMetrics] = useState<{ cpuPercent: number; memoryBytes: number; uptimeSeconds: number } | null>(null);
 
   // Desktop IDE Bridge Integration: Available in Electron or when running locally on host
   const isDesktop = typeof window !== 'undefined' && (
@@ -145,7 +146,8 @@ export const ServerDetailPage: React.FC<ServerDetailPageProps> = ({
   };
 
   const copySftp = () => {
-    navigator.clipboard.writeText('sftp://admin@localhost:2022');
+    const sftpHost = window.location.hostname || 'localhost';
+    navigator.clipboard.writeText(`sftp://admin@${sftpHost}:2022`);
     setCopiedSftp(true);
     setTimeout(() => setCopiedSftp(false), 2000);
   };
@@ -168,11 +170,17 @@ export const ServerDetailPage: React.FC<ServerDetailPageProps> = ({
 
   const fetchServerDetails = useCallback(async () => {
     try {
-      const data = await api.get<ServerInstanceData & { players?: PlayerData[] }>(`/servers/${serverId}`);
+      const data = await api.get<
+        ServerInstanceData & {
+          players?: PlayerData[];
+          metrics?: { cpuPercent: number; memoryBytes: number; uptimeSeconds: number } | null;
+        }
+      >(`/servers/${serverId}`);
       setServer(data);
       if (Array.isArray(data.players)) {
         setPlayers(data.players);
       }
+      setMetrics(data.metrics ?? null);
     } catch {
       // ignore
     } finally {
@@ -262,9 +270,11 @@ export const ServerDetailPage: React.FC<ServerDetailPageProps> = ({
                 {statusConfig.label}
               </span>
               {isOnline && (
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                   <Activity className="w-3 h-3 text-emerald-400" />
-                  20.0 TPS
+                  {metrics
+                    ? `CPU ${metrics.cpuPercent.toFixed(1)}% • RAM ${Math.round(metrics.memoryBytes / (1024 * 1024))} / ${server.memoryMb} MB`
+                    : '20.0 TPS'}
                 </span>
               )}
             </div>

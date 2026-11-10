@@ -202,4 +202,53 @@ describe('ContentInstallerService', () => {
       .catch(() => false);
     expect(pluginExists).toBe(false);
   });
+
+  it('should block SSRF download URLs targeting localhost or private networks (SEC-03)', async () => {
+    const ssrfRequest: InstallContentRequest = {
+      instanceId,
+      providerId: 'modrinth',
+      projectId: 'ssrf-test',
+      projectType: 'mod',
+      versionId: 'v1',
+      versionNumber: '1.0.0',
+      fileName: 'mod.jar',
+      downloadUrl: 'http://127.0.0.1:8080/internal-secret.jar'
+    };
+
+    await expect(installer.install(ssrfRequest)).rejects.toThrow(/No se permiten descargas desde direcciones locales o redes privadas/);
+
+    const metadataRequest: InstallContentRequest = {
+      ...ssrfRequest,
+      downloadUrl: 'http://169.254.169.254/latest/meta-data/'
+    };
+
+    await expect(installer.install(metadataRequest)).rejects.toThrow(/No se permiten descargas desde direcciones locales o redes privadas/);
+  });
+
+  it('should sanitize path traversal sequences in fileName during install (SEC-03)', async () => {
+    const mockFileContent = Buffer.from('safe-content');
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: createMockStream(mockFileContent)
+    } as unknown as Response);
+
+    const request: InstallContentRequest = {
+      instanceId,
+      providerId: 'modrinth',
+      projectId: 'traversal-test',
+      projectType: 'mod',
+      versionId: 'v1',
+      versionNumber: '1.0.0',
+      fileName: '../../escaped.jar',
+      downloadUrl: 'https://example.com/escaped.jar'
+    };
+
+    const installed = await installer.install(request);
+    expect(installed.fileName).toBe('escaped.jar');
+
+    const safePath = path.join(instanceDir, 'mods', 'escaped.jar');
+    const existsInMods = await fs.access(safePath).then(() => true).catch(() => false);
+    expect(existsInMods).toBe(true);
+  });
 });

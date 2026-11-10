@@ -86,7 +86,7 @@ export class SftpServer {
       this.server = new Server({ hostKeys: [hostKey] }, (client: any) => {
         this.activeClients.add(client);
 
-        let authenticatedUser: { username: string; role: UserRole } | null = null;
+        let authenticatedUser: { username: string; role: UserRole; allowedServers: string[] } | null = null;
 
         client.on('error', () => {
           // Suppress unhandled socket resets from disconnected clients
@@ -101,7 +101,8 @@ export class SftpServer {
             const loginResult = await this.authService.login(ctx.username, ctx.password);
             authenticatedUser = {
               username: loginResult.user.username,
-              role: loginResult.user.role
+              role: loginResult.user.role,
+              allowedServers: loginResult.user.allowedServers || ['*']
             };
             ctx.accept();
           } catch {
@@ -124,6 +125,7 @@ export class SftpServer {
               const sessionHandler = new SftpSessionHandler({
                 username: user.username,
                 role: user.role,
+                allowedServers: user.allowedServers,
                 pathResolver: this.pathResolver
               });
               sessionHandler.attach(sftpStream);

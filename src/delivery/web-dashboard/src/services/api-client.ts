@@ -74,6 +74,40 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 }
 
+async function downloadFile(endpoint: string, filename: string): Promise<void> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'GET',
+    headers
+  });
+
+  if (!res.ok) {
+    let errMsg = `Error al descargar archivo (HTTP ${res.status})`;
+    try {
+      const data = await res.json();
+      if (data.error) errMsg = data.error;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(res.status, errMsg);
+  }
+
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+}
+
 export const api = {
   get: <T>(url: string) => request<T>(url, { method: 'GET' }),
   post: <T>(url: string, body?: unknown) =>
@@ -91,5 +125,6 @@ export const api = {
       method: 'POST',
       body: formData
     }),
+  download: (url: string, filename: string) => downloadFile(url, filename),
   delete: <T>(url: string) => request<T>(url, { method: 'DELETE' })
 };

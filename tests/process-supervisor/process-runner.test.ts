@@ -117,4 +117,47 @@ describe('ProcessRunner', () => {
     expect(eventArg.instanceId).toBe(mockInstance.id);
     expect(eventArg.diagnostic.code).toBe('JAVA_VERSION_MISMATCH');
   });
+
+  it('should track active players via getPlayers across join, leave, and process stop (BUG-04)', async () => {
+    const playerScript = `
+      console.log('[Server thread/INFO]: Done (1.2s)! For help, type "help"');
+      console.log('[12:00:01 INFO]: Alex joined the game');
+      console.log('[12:00:02 INFO]: Steve joined the game');
+      process.stdin.on('data', (d) => {
+        const cmd = d.toString().trim();
+        if (cmd === 'leave_alex') {
+          console.log('[12:01:00 INFO]: Alex left the game');
+        } else if (cmd === 'stop') {
+          process.exit(0);
+        }
+      });
+      setInterval(() => {}, 1000);
+    `;
+
+    await runner.startProcess(mockInstance, {
+      executable: process.execPath,
+      args: ['-e', playerScript],
+      cwd: process.cwd()
+    });
+
+    const startWait = Date.now();
+    while (Date.now() - startWait < 3000) {
+      if (runner.getPlayers(mockInstance.id).length === 2) break;
+      await new Promise((r) => setTimeout(r, 40));
+    }
+
+    expect(runner.getPlayers(mockInstance.id).map((p) => p.username)).toEqual(['Alex', 'Steve']);
+
+    runner.sendCommand(mockInstance.id, 'leave_alex');
+    const leaveWait = Date.now();
+    while (Date.now() - leaveWait < 3000) {
+      if (runner.getPlayers(mockInstance.id).length === 1) break;
+      await new Promise((r) => setTimeout(r, 40));
+    }
+
+    expect(runner.getPlayers(mockInstance.id).map((p) => p.username)).toEqual(['Steve']);
+
+    await runner.stopProcess(mockInstance.id, 2000);
+    expect(runner.getPlayers(mockInstance.id)).toEqual([]);
+  });
 });

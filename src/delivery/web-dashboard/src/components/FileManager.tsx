@@ -46,6 +46,7 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
   // Editor Modal State
   const [editingFile, setEditingFile] = useState<{ path: string; name: string } | null>(null);
   const [editorContent, setEditorContent] = useState<string>('');
+  const [isEditorTruncated, setIsEditorTruncated] = useState(false);
   const [isEditorLoading, setIsEditorLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -177,6 +178,7 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
   const handleOpenFile = async (item: FileItemData) => {
     setEditingFile({ path: item.relativePath, name: item.name });
     setIsEditorLoading(true);
+    setIsEditorTruncated(false);
     setSaveSuccess(false);
     setErrorMessage(null);
     try {
@@ -184,6 +186,7 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
         `/servers/${serverId}/files/content?path=${encodeURIComponent(item.relativePath)}`
       );
       setEditorContent(data.content);
+      setIsEditorTruncated(Boolean(data.isTruncated));
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Error al leer archivo');
       setEditingFile(null);
@@ -194,7 +197,7 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
 
   // Save file content
   const handleSaveFile = async () => {
-    if (!editingFile) return;
+    if (!editingFile || isEditorTruncated) return;
     setIsSaving(true);
     setSaveSuccess(false);
     try {
@@ -688,14 +691,21 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
                       )}
 
                       {!item.isDirectory && (
-                        <a
-                          href={`/api/servers/${serverId}/files/download?path=${encodeURIComponent(item.relativePath)}`}
-                          download
+                        <button
+                          type="button"
+                          onClick={() => {
+                            api.download(
+                              `/servers/${serverId}/files/download?path=${encodeURIComponent(item.relativePath)}`,
+                              item.name
+                            ).catch((err: unknown) => {
+                              setErrorMessage(err instanceof Error ? err.message : 'Error al descargar archivo');
+                            });
+                          }}
                           className="p-1.5 rounded hover:bg-nebula-800 text-slate-300 hover:text-emerald-400 transition-colors"
                           title="Descargar archivo"
                         >
                           <Download className="w-3.5 h-3.5" />
-                        </a>
+                        </button>
                       )}
 
                       <button
@@ -748,13 +758,13 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
 
                 <button
                   type="button"
-                  disabled={isSaving || isEditorLoading}
+                  disabled={isSaving || isEditorLoading || isEditorTruncated}
                   onClick={handleSaveFile}
                   className="px-3.5 py-1.5 rounded-lg bg-nebula-accent hover:bg-emerald-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                  title="Guardar archivo (Ctrl+S)"
+                  title={isEditorTruncated ? 'Modo solo lectura (Archivo > 2 MB)' : 'Guardar archivo (Ctrl+S)'}
                 >
                   <Save className="w-3.5 h-3.5" />
-                  <span>{isSaving ? 'Guardando...' : 'Guardar'}</span>
+                  <span>{isEditorTruncated ? 'Solo Lectura' : isSaving ? 'Guardando...' : 'Guardar'}</span>
                 </button>
 
                 <button
@@ -768,6 +778,15 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
               </div>
             </div>
 
+            {isEditorTruncated && (
+              <div className="px-4 py-2 bg-amber-950/70 border-b border-amber-500/40 text-amber-200 text-xs flex items-center gap-2 shrink-0">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>
+                  Este archivo supera los 2 MB. Se muestran los primeros 2 MB en <strong>modo solo lectura</strong> para proteger el archivo contra pérdida de datos.
+                </span>
+              </div>
+            )}
+
             {/* Editor Textarea */}
             <div className="flex-1 p-2 bg-nebula-950 overflow-hidden relative">
               {isEditorLoading ? (
@@ -777,6 +796,7 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
               ) : (
                 <textarea
                   value={editorContent}
+                  readOnly={isEditorTruncated}
                   onChange={(e) => setEditorContent(e.target.value)}
                   onKeyDown={(e) => {
                     if ((e.ctrlKey || e.metaKey) && e.key === 's') {

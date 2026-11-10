@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from './context/AuthContext.js';
+import { api } from './services/api-client.js';
 import { Header } from './components/Header.js';
 import { Sidebar, type NavTab } from './components/Sidebar.js';
 import { CommandPalette } from './components/CommandPalette.js';
@@ -37,6 +38,14 @@ export const App: React.FC = () => {
 
   // Selected Server for Detail View
   const [selectedServer, setSelectedServer] = useState<ServerInstanceData | null>(null);
+  const [serverCount, setServerCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (!token || !user) return;
+    api.get<ServerInstanceData[]>('/servers').then((list) => {
+      if (Array.isArray(list)) setServerCount(list.length);
+    }).catch(() => {});
+  }, [token, user, currentTab, isCreateWizardOpen]);
 
   // Password Change Form State
   const [currentPass, setCurrentPass] = useState('');
@@ -89,7 +98,7 @@ export const App: React.FC = () => {
             setCurrentTab(tab);
             setSelectedServer(null);
           }}
-          serverCount={0}
+          serverCount={serverCount}
           isAdmin={user.role === 'ADMIN'}
         />
 
@@ -208,7 +217,8 @@ export const App: React.FC = () => {
             <div className="flex items-center justify-between pt-2">
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`sftp://${user.username}@localhost:2022`);
+                  const sftpHost = window.location.hostname || 'localhost';
+                  navigator.clipboard.writeText(`sftp://${user.username}@${sftpHost}:2022`);
                   setCopiedSftp(true);
                   setTimeout(() => setCopiedSftp(false), 2000);
                 }}

@@ -216,15 +216,22 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ serverId, isOnline
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 self-end sm:self-center">
-                <a
-                  href={`/api/servers/${serverId}/backups/${b.id}/download`}
-                  download
+                <button
+                  type="button"
+                  onClick={() => {
+                    api.download(`/servers/${serverId}/backups/${b.id}/download`, b.filename).catch((err: unknown) => {
+                      setFeedbackMessage({
+                        type: 'error',
+                        text: err instanceof Error ? err.message : 'Error al descargar copia de seguridad'
+                      });
+                    });
+                  }}
                   className="px-3 py-1.5 rounded-lg bg-nebula-850 hover:bg-nebula-800 text-slate-300 hover:text-white border border-nebula-750 text-xs font-semibold flex items-center gap-1.5 transition-colors"
                   title="Descargar archivo comprimido"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Descargar</span>
-                </a>
+                </button>
 
                 <button
                   type="button"

@@ -3,7 +3,7 @@ import type { IContentProvider } from '../../../content-catalog/providers/conten
 import type { CurseForgeProvider } from '../../../content-catalog/providers/curseforge-provider.js';
 import type { ContentInstallerService } from '../../../content-catalog/services/content-installer.js';
 import type { AuthService } from '../../../auth-identity/services/auth-service.js';
-import { createAuthHook, requireRole } from '../middleware/auth-hook.js';
+import { createAuthHook, requireRole, hasServerAccess } from '../middleware/auth-hook.js';
 import type {
   CatalogSearchQuery,
   InstallContentRequest,
@@ -150,6 +150,9 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (fa
   fastify.get<{
     Params: { instanceId: string };
   }>('/installed/:instanceId', async (request, reply) => {
+    if (!hasServerAccess(request.user, request.params.instanceId)) {
+      return reply.status(403).send({ error: 'Acceso denegado: No tienes permisos sobre este servidor' });
+    }
     const manifest = await installer.getManifest(request.params.instanceId);
     return reply.status(200).send(manifest);
   });
@@ -158,6 +161,9 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (fa
   fastify.post<{
     Body: InstallContentRequest;
   }>('/install', { preHandler: [requireRole(['ADMIN', 'OPERATOR'])] }, async (request, reply) => {
+    if (!hasServerAccess(request.user, request.body?.instanceId)) {
+      return reply.status(403).send({ error: 'Acceso denegado: No tienes permisos sobre este servidor' });
+    }
     try {
       const installed = await installer.install(request.body);
       return reply.status(200).send(installed);
@@ -172,6 +178,9 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (fa
     Params: { instanceId: string; projectId: string };
   }>('/installed/:instanceId/:projectId', { preHandler: [requireRole(['ADMIN', 'OPERATOR'])] }, async (request, reply) => {
     const { instanceId, projectId } = request.params;
+    if (!hasServerAccess(request.user, instanceId)) {
+      return reply.status(403).send({ error: 'Acceso denegado: No tienes permisos sobre este servidor' });
+    }
     try {
       await installer.uninstall(instanceId, projectId);
       return reply.status(200).send({ message: `Elemento ${projectId} desinstalado correctamente` });

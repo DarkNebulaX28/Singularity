@@ -51,6 +51,34 @@ export const serverRoutes: FastifyPluginAsync<ServerRoutesOptions> = async (fast
     }
   });
 
+  const BLOCKED_JVM_PREFIXES = [
+    '-javaagent:',
+    '-agentlib:',
+    '-agentpath:',
+    '-xx:onoutofmemoryerror',
+    '-xx:onerror',
+    '-xx:errorfile'
+  ];
+
+  function validateAndSanitizeJvmArgs(jvmArgs?: string[]): string[] {
+    if (!Array.isArray(jvmArgs)) return [];
+    const safeArgs: string[] = [];
+    for (const raw of jvmArgs) {
+      if (typeof raw !== 'string') continue;
+      const arg = raw.trim();
+      if (!arg) continue;
+      if (!arg.startsWith('-')) {
+        throw new Error(`Argumento JVM inválido '${arg}': Todos los flags deben comenzar con '-'`);
+      }
+      const lower = arg.toLowerCase();
+      if (BLOCKED_JVM_PREFIXES.some((prefix) => lower.startsWith(prefix))) {
+        throw new Error(`Argumento JVM bloqueado por seguridad: '${arg}'`);
+      }
+      safeArgs.push(arg);
+    }
+    return safeArgs;
+  }
+
   async function resolveCompatibleJavaExecutable(instance: ServerInstance): Promise<string> {
     const defaultFallback = process.platform === 'win32' ? 'java.exe' : 'java';
     let candidate = instance.javaPath?.trim();
@@ -117,6 +145,20 @@ export const serverRoutes: FastifyPluginAsync<ServerRoutesOptions> = async (fast
     Body: CreateServerInstanceOptions;
   }>('/', { preHandler: [requireRole(['ADMIN', 'OPERATOR'])] }, async (request, reply) => {
     try {
+      if (request.body.jvmArgs) {
+        request.body.jvmArgs = validateAndSanitizeJvmArgs(request.body.jvmArgs);
+      }
+
+      if (request.body.javaPath && request.user?.role !== 'ADMIN') {
+        const candidate = request.body.javaPath.trim();
+        if (candidate !== 'java' && candidate !== 'java.exe') {
+          const inspected = fs.existsSync(candidate) ? await inspectJavaBinary(candidate) : null;
+          if (!inspected) {
+            return reply.status(400).send({ error: 'Ruta de binario Java no válida o no autorizada' });
+          }
+        }
+      }
+
       if (!request.body.javaPath) {
         try {
           const runtimes = await detectSystemRuntimes();
@@ -146,10 +188,17 @@ export const serverRoutes: FastifyPluginAsync<ServerRoutesOptions> = async (fast
     }
 
     const liveState = processRunner.getState(instance.id);
+    const players = processRunner.getPlayers(instance.id);
+    const metrics = liveState && liveState.status !== 'offline' && liveState.status !== 'crashed'
+      ? await processRunner.getMetrics(instance.id)
+      : null;
+
     return reply.status(200).send({
       ...instance,
       status: liveState ? liveState.status : instance.status,
-      pid: liveState?.pid
+      pid: liveState?.pid,
+      players,
+      metrics
     });
   });
 
@@ -422,14 +471,25 @@ export const serverRoutes: FastifyPluginAsync<ServerRoutesOptions> = async (fast
     if (!state) {
       return reply.status(200).send({
         status: 'offline',
-        pid: null
+        pid: null,
+        cpuPercent: 0,
+        memoryBytes: 0,
+        uptimeSeconds: 0,
+        players: []
       });
     }
+
+    const liveMetrics = await processRunner.getMetrics(request.params.id);
+    const players = processRunner.getPlayers(request.params.id);
 
     return reply.status(200).send({
       status: state.status,
       pid: state.pid,
-      startedAt: state.startedAt
+      startedAt: state.startedAt,
+      cpuPercent: liveMetrics?.cpuPercent ?? 0,
+      memoryBytes: liveMetrics?.memoryBytes ?? 0,
+      uptimeSeconds: liveMetrics?.uptimeSeconds ?? 0,
+      players
     });
   });
 

@@ -16,11 +16,42 @@ import { extractZip } from './zip-extractor.js';
 
 const PLUGIN_LOADERS = new Set(['paper', 'purpur', 'spigot', 'bukkit']);
 
+function validateSafeDownloadUrl(rawUrl: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error(`URL de descarga inválida: ${rawUrl}`);
+  }
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error(`Protocolo no permitido en URL de descarga: ${parsed.protocol}`);
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const isPrivateOrLoopback =
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '0.0.0.0' ||
+    host === '[::1]' ||
+    host === '169.254.169.254' ||
+    host.startsWith('10.') ||
+    host.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host);
+
+  if (isPrivateOrLoopback) {
+    throw new Error('Acceso denegado: No se permiten descargas desde direcciones locales o redes privadas (SSRF).');
+  }
+
+  return parsed.toString();
+}
+
 async function downloadFile(url: string, destPath: string): Promise<void> {
+  const safeUrl = validateSafeDownloadUrl(url);
   await fs.mkdir(path.dirname(destPath), { recursive: true });
   const tempPath = `${destPath}.tmp-${Date.now()}`;
 
-  const res = await fetch(url, {
+  const res = await fetch(safeUrl, {
     headers: {
       'User-Agent': 'NebulaX-Singularity/0.1.0 (contact@nebulaxstudio.top)'
     }
@@ -63,7 +94,11 @@ export class ContentInstallerService {
   ) {}
 
   private getInstanceDir(instanceId: string): string {
-    return path.join(this.dataDir, instanceId);
+    const safeId = path.basename(instanceId).replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!safeId) {
+      throw new Error(`ID de instancia inválido: ${instanceId}`);
+    }
+    return path.join(this.dataDir, safeId);
   }
 
   private getManifestPath(instanceId: string): string {
@@ -187,40 +222,51 @@ export class ContentInstallerService {
   }
 
   async install(request: InstallContentRequest): Promise<InstalledItem> {
-    const instanceDir = this.getInstanceDir(request.instanceId);
-    const serverLoader = await this.getInstanceLoader(request.instanceId);
+    const safeFileName = path.basename(request.fileName.trim());
+    if (!safeFileName || safeFileName === '.' || safeFileName === '..') {
+      throw new Error('Nombre de archivo inválido para instalación.');
+    }
+    const safeDownloadUrl = validateSafeDownloadUrl(request.downloadUrl);
+    const sanitizedRequest: InstallContentRequest = {
+      ...request,
+      fileName: safeFileName,
+      downloadUrl: safeDownloadUrl
+    };
+
+    const instanceDir = this.getInstanceDir(sanitizedRequest.instanceId);
+    const serverLoader = await this.getInstanceLoader(sanitizedRequest.instanceId);
     const isPluginEngine = Boolean(serverLoader && PLUGIN_LOADERS.has(serverLoader));
 
     // 1. Client-only mod prevention for dedicated servers
-    const isModOnModEngine = !isPluginEngine && (request.projectType === 'mod' || !request.projectType);
-    if (!request.force && isModOnModEngine) {
-      if (isClientOnlyMod(request.fileName) || isClientOnlyMod(request.projectId)) {
+    const isModOnModEngine = !isPluginEngine && (sanitizedRequest.projectType === 'mod' || !sanitizedRequest.projectType);
+    if (!sanitizedRequest.force && isModOnModEngine) {
+      if (isClientOnlyMod(sanitizedRequest.fileName) || isClientOnlyMod(sanitizedRequest.projectId)) {
         throw new Error(
-          `El mod '${request.fileName}' es exclusivo de cliente (gráficos, sonido o interfaz) y no puede ejecutarse en un servidor dedicado porque causaría un crash al iniciar.`
+          `El mod '${sanitizedRequest.fileName}' es exclusivo de cliente (gráficos, sonido o interfaz) y no puede ejecutarse en un servidor dedicado porque causaría un crash al iniciar.`
         );
       }
     }
 
     // 2. Modpack / ZIP Archive extraction workflow (.zip or .mrpack)
     const isModpack =
-      request.projectType === 'modpack' ||
-      request.fileName.toLowerCase().endsWith('.zip') ||
-      request.fileName.toLowerCase().endsWith('.mrpack');
+      sanitizedRequest.projectType === 'modpack' ||
+      sanitizedRequest.fileName.toLowerCase().endsWith('.zip') ||
+      sanitizedRequest.fileName.toLowerCase().endsWith('.mrpack');
 
     if (isModpack) {
-      return this.installModpack(instanceDir, request);
+      return this.installModpack(instanceDir, sanitizedRequest);
     }
 
     // 3. Single JAR / Datapack file installation workflow
-    const subfolder = this.getSubfolder(request.projectType, serverLoader);
+    const subfolder = this.getSubfolder(sanitizedRequest.projectType, serverLoader);
     const destinationDir = path.join(instanceDir, subfolder);
     await fs.mkdir(destinationDir, { recursive: true });
 
-    const finalPath = path.join(destinationDir, request.fileName);
-    const tempPath = path.join(destinationDir, `temp-${Date.now()}-${request.fileName}`);
+    const finalPath = path.join(destinationDir, sanitizedRequest.fileName);
+    const tempPath = path.join(destinationDir, `temp-${Date.now()}-${sanitizedRequest.fileName}`);
 
     // Download content stream
-    const res = await fetch(request.downloadUrl, {
+    const res = await fetch(sanitizedRequest.downloadUrl, {
       headers: {
         'User-Agent': 'NebulaX-Singularity/0.1.0 (contact@nebulaxstudio.top)'
       }
@@ -228,7 +274,7 @@ export class ContentInstallerService {
 
     if (!res.ok || !res.body) {
       throw new Error(
-        `Error al descargar ${request.fileName} desde ${request.downloadUrl} (HTTP ${res.status})`
+        `Error al descargar ${sanitizedRequest.fileName} desde ${sanitizedRequest.downloadUrl} (HTTP ${res.status})`
       );
     }
 
@@ -238,29 +284,29 @@ export class ContentInstallerService {
     await fs.rename(tempPath, finalPath);
 
     // If destination was forced to plugins/ due to Paper engine, record effective type
-    const effectiveProjectType = subfolder === 'plugins' ? 'plugin' : request.projectType;
+    const effectiveProjectType = subfolder === 'plugins' ? 'plugin' : sanitizedRequest.projectType;
 
     const installedItem: InstalledItem = {
-      id: `${request.providerId}-${request.projectId}`,
-      projectId: request.projectId,
-      providerId: request.providerId,
+      id: `${sanitizedRequest.providerId}-${sanitizedRequest.projectId}`,
+      projectId: sanitizedRequest.projectId,
+      providerId: sanitizedRequest.providerId,
       projectType: effectiveProjectType,
-      versionId: request.versionId,
-      versionNumber: request.versionNumber,
-      fileName: request.fileName,
+      versionId: sanitizedRequest.versionId,
+      versionNumber: sanitizedRequest.versionNumber,
+      fileName: sanitizedRequest.fileName,
       destinationFolder: subfolder,
       installedAt: new Date().toISOString()
     };
 
     // Update manifest
-    const manifest = await this.getStoredManifest(request.instanceId);
+    const manifest = await this.getStoredManifest(sanitizedRequest.instanceId);
     const filtered = manifest.installedItems.filter(
-      (item) => item.projectId !== request.projectId
+      (item) => item.projectId !== sanitizedRequest.projectId
     );
     filtered.push(installedItem);
 
     await this.saveManifest({
-      instanceId: request.instanceId,
+      instanceId: sanitizedRequest.instanceId,
       installedItems: filtered,
       updatedAt: new Date().toISOString()
     });
@@ -327,7 +373,11 @@ export class ContentInstallerService {
           const downloadUrl = file.downloads?.[0];
           if (!downloadUrl) continue;
 
-          const targetFile = path.join(instanceDir, file.path);
+          const resolvedInstanceDir = path.resolve(instanceDir);
+          const targetFile = path.resolve(resolvedInstanceDir, file.path);
+          if (!targetFile.startsWith(resolvedInstanceDir + path.sep)) {
+            continue;
+          }
           downloadTasks.push(async () => {
             await downloadFile(downloadUrl, targetFile);
             downloadedCount++;

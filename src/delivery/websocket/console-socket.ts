@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { WebSocket, RawData } from 'ws';
 import type { ProcessRunner } from '../../process-supervisor/services/process-runner.js';
 import type { AuthService } from '../../auth-identity/services/auth-service.js';
+import type { AuthTokenPayload } from '../../auth-identity/models/user.js';
+import { hasServerAccess } from '../http/middleware/auth-hook.js';
 
 export interface ConsoleSocketOptions {
   processRunner: ProcessRunner;
@@ -11,9 +13,22 @@ export interface ConsoleSocketOptions {
 export const consoleSocketPlugin: FastifyPluginAsync<ConsoleSocketOptions> = async (fastify, opts) => {
   const { processRunner, authService } = opts;
 
+  const verifyAndResolveUser = (token: string): AuthTokenPayload => {
+    const payload = authService.verifyToken(token);
+    const dbUser = authService.getUserById(payload.userId);
+    if (dbUser) {
+      if (dbUser.isActive === false) {
+        throw new Error('Cuenta deshabilitada');
+      }
+      payload.role = dbUser.role;
+      payload.allowedServers = dbUser.allowedServers || ['*'];
+    }
+    return payload;
+  };
+
   const handleSocketConnection = (socket: WebSocket, request: any) => {
     const instanceId = request.params?.id;
-    let isAuthenticated = false;
+    let authenticatedUser: AuthTokenPayload | null = null;
 
     const sendJson = (payload: unknown) => {
       if (socket.readyState === 1 /* OPEN */) {
@@ -25,8 +40,13 @@ export const consoleSocketPlugin: FastifyPluginAsync<ConsoleSocketOptions> = asy
     const queryToken = request.query?.token;
     if (queryToken) {
       try {
-        authService.verifyToken(queryToken);
-        isAuthenticated = true;
+        const user = verifyAndResolveUser(queryToken);
+        if (!hasServerAccess(user, instanceId)) {
+          sendJson({ type: 'error', message: 'Acceso denegado: No tienes permisos para acceder a este servidor' });
+          socket.close(1008, 'Forbidden');
+          return;
+        }
+        authenticatedUser = user;
       } catch {
         sendJson({ type: 'error', message: 'Token de autenticación inválido o expirado' });
         socket.close(1008, 'Unauthorized');
@@ -36,9 +56,9 @@ export const consoleSocketPlugin: FastifyPluginAsync<ConsoleSocketOptions> = asy
 
     // If not authenticated via query string, wait for initial auth message
     let authTimeout: NodeJS.Timeout | null = null;
-    if (!isAuthenticated) {
+    if (!authenticatedUser) {
       authTimeout = setTimeout(() => {
-        if (!isAuthenticated) {
+        if (!authenticatedUser) {
           sendJson({ type: 'error', message: 'Timeout de autenticación WebSocket' });
           socket.close(1008, 'Unauthorized');
         }
@@ -98,7 +118,7 @@ export const consoleSocketPlugin: FastifyPluginAsync<ConsoleSocketOptions> = asy
       });
     };
 
-    if (isAuthenticated) {
+    if (authenticatedUser) {
       startStreaming();
     }
 
@@ -106,13 +126,23 @@ export const consoleSocketPlugin: FastifyPluginAsync<ConsoleSocketOptions> = asy
     socket.on('message', (raw: RawData) => {
       try {
         const msg = JSON.parse(raw.toString());
-        if (!isAuthenticated) {
+        if (!authenticatedUser) {
           if (msg.type === 'auth' && typeof msg.token === 'string') {
-            authService.verifyToken(msg.token);
-            isAuthenticated = true;
-            if (authTimeout) clearTimeout(authTimeout);
-            sendJson({ type: 'authenticated', success: true });
-            startStreaming();
+            try {
+              const user = verifyAndResolveUser(msg.token);
+              if (!hasServerAccess(user, instanceId)) {
+                sendJson({ type: 'error', message: 'Acceso denegado: No tienes permisos para acceder a este servidor' });
+                socket.close(1008, 'Forbidden');
+                return;
+              }
+              authenticatedUser = user;
+              if (authTimeout) clearTimeout(authTimeout);
+              sendJson({ type: 'authenticated', success: true });
+              startStreaming();
+            } catch {
+              sendJson({ type: 'error', message: 'Token de autenticación inválido o expirado' });
+              socket.close(1008, 'Unauthorized');
+            }
           } else {
             sendJson({ type: 'error', message: 'Debe autenticarse primero' });
             socket.close(1008, 'Unauthorized');
@@ -126,8 +156,15 @@ export const consoleSocketPlugin: FastifyPluginAsync<ConsoleSocketOptions> = asy
           return;
         }
 
-        // Handle commands
+        // Handle commands (Only ADMIN and OPERATOR)
         if (msg.type === 'command' && typeof msg.command === 'string') {
+          if (authenticatedUser.role !== 'ADMIN' && authenticatedUser.role !== 'OPERATOR') {
+            sendJson({
+              type: 'error',
+              message: 'Permisos insuficientes: Tu rol (VIEWER) es de solo lectura y no permite enviar comandos.'
+            });
+            return;
+          }
           processRunner.sendCommand(instanceId, msg.command);
         }
       } catch {

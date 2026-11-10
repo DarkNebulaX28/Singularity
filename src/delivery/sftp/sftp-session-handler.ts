@@ -9,6 +9,7 @@ const { STATUS_CODE, OPEN_MODE, flagsToString } = (ssh2.utils as any).sftp;
 export interface SftpSessionOptions {
   username: string;
   role: UserRole;
+  allowedServers?: string[];
   pathResolver: SftpPathResolver;
 }
 
@@ -40,6 +41,7 @@ function toSftpAttrs(stats: fs.Stats) {
 export class SftpSessionHandler {
   private readonly username: string;
   private readonly role: UserRole;
+  private readonly allowedServers: string[];
   private readonly pathResolver: SftpPathResolver;
   private readonly openHandles = new Map<string, OpenHandle>();
   private handleCounter = 1;
@@ -47,6 +49,7 @@ export class SftpSessionHandler {
   constructor(options: SftpSessionOptions) {
     this.username = options.username;
     this.role = options.role;
+    this.allowedServers = options.allowedServers || ['*'];
     this.pathResolver = options.pathResolver;
   }
 
@@ -54,10 +57,30 @@ export class SftpSessionHandler {
     return this.role === 'VIEWER';
   }
 
+  private hasFullServerAccess(): boolean {
+    return this.role === 'ADMIN' || this.allowedServers.includes('*');
+  }
+
+  private resolveAllowed(reqPath: string): string | null {
+    const resolved = this.pathResolver.resolve(reqPath);
+    if (!resolved) return null;
+    if (this.hasFullServerAccess()) return resolved;
+
+    const rootDir = this.pathResolver.getRootDir();
+    if (resolved === rootDir) return resolved;
+
+    const rel = path.relative(rootDir, resolved);
+    const topSegment = rel.split(/[\\/]/)[0];
+    if (!topSegment || !this.allowedServers.includes(topSegment)) {
+      return null;
+    }
+    return resolved;
+  }
+
   attach(sftpStream: any): void {
     // REALPATH: Canonicalize path
     sftpStream.on('REALPATH', (reqid: number, reqPath: string) => {
-      const resolved = this.pathResolver.resolve(reqPath || '/');
+      const resolved = this.resolveAllowed(reqPath || '/');
       if (!resolved) {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }
@@ -67,7 +90,7 @@ export class SftpSessionHandler {
 
     // STAT
     sftpStream.on('STAT', async (reqid: number, reqPath: string) => {
-      const resolved = this.pathResolver.resolve(reqPath);
+      const resolved = this.resolveAllowed(reqPath);
       if (!resolved) {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }
@@ -85,7 +108,7 @@ export class SftpSessionHandler {
 
     // LSTAT
     sftpStream.on('LSTAT', async (reqid: number, reqPath: string) => {
-      const resolved = this.pathResolver.resolve(reqPath);
+      const resolved = this.resolveAllowed(reqPath);
       if (!resolved) {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }
@@ -103,7 +126,7 @@ export class SftpSessionHandler {
 
     // OPENDIR
     sftpStream.on('OPENDIR', async (reqid: number, reqPath: string) => {
-      const resolved = this.pathResolver.resolve(reqPath);
+      const resolved = this.resolveAllowed(reqPath);
       if (!resolved) {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }
@@ -141,9 +164,13 @@ export class SftpSessionHandler {
       }
 
       try {
+        const isRootDir = item.path === this.pathResolver.getRootDir();
         const entries = await fs.promises.readdir(item.path, { withFileTypes: true });
         const list = [];
         for (const entry of entries) {
+          if (isRootDir && !this.hasFullServerAccess() && !this.allowedServers.includes(entry.name)) {
+            continue;
+          }
           const fullPath = path.join(item.path, entry.name);
           let stats: fs.Stats;
           try {
@@ -171,7 +198,7 @@ export class SftpSessionHandler {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }
 
-      const resolved = this.pathResolver.resolve(filename);
+      const resolved = this.resolveAllowed(filename);
       if (!resolved) {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }
@@ -277,7 +304,7 @@ export class SftpSessionHandler {
       if (this.isReadOnly()) {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }
-      const resolved = this.pathResolver.resolve(reqPath);
+      const resolved = this.resolveAllowed(reqPath);
       if (!resolved) {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }
@@ -294,7 +321,7 @@ export class SftpSessionHandler {
       if (this.isReadOnly()) {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }
-      const resolved = this.pathResolver.resolve(reqPath);
+      const resolved = this.resolveAllowed(reqPath);
       if (!resolved) {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }
@@ -315,7 +342,7 @@ export class SftpSessionHandler {
       if (this.isReadOnly()) {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }
-      const resolved = this.pathResolver.resolve(reqPath);
+      const resolved = this.resolveAllowed(reqPath);
       if (!resolved) {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }
@@ -332,8 +359,8 @@ export class SftpSessionHandler {
       if (this.isReadOnly()) {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }
-      const resolvedOld = this.pathResolver.resolve(oldPath);
-      const resolvedNew = this.pathResolver.resolve(newPath);
+      const resolvedOld = this.resolveAllowed(oldPath);
+      const resolvedNew = this.resolveAllowed(newPath);
       if (!resolvedOld || !resolvedNew) {
         return sftpStream.status(reqid, STATUS_CODE.PERMISSION_DENIED);
       }

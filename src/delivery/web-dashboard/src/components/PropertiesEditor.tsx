@@ -12,9 +12,13 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
-  Swords
+  Swords,
+  Terminal,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { MotdDesigner } from './MotdDesigner';
+import { api } from '../services/api-client.js';
 
 export interface PropertiesEditorProps {
   serverId: string;
@@ -266,21 +270,13 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
   // Custom key addition state
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
 
   const fetchProperties = async () => {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('singularity_token');
-      const res = await fetch(`/api/servers/${serverId}/properties`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      if (!res.ok) {
-        throw new Error('No se pudo cargar el archivo server.properties');
-      }
-      const data = await res.json();
+      const data = await api.get<Record<string, PropertyValue>>(`/servers/${serverId}/properties`);
       setProperties(data);
       setInitialProperties(data);
     } catch (err: unknown) {
@@ -337,20 +333,7 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
     setError(null);
     setSuccessMessage(null);
     try {
-      const token = localStorage.getItem('singularity_token');
-      const res = await fetch(`/api/servers/${serverId}/properties`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ properties })
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Error al guardar server.properties');
-      }
+      await api.put(`/servers/${serverId}/properties`, { properties });
 
       setInitialProperties(properties);
       setSuccessMessage('¡Archivo server.properties guardado y sincronizado con éxito!');
@@ -478,6 +461,7 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
             { id: 'gameplay' as const, label: 'Jugabilidad', icon: Shield },
             { id: 'network' as const, label: 'Red y Conexión', icon: Radio },
             { id: 'world' as const, label: 'Mundo', icon: Globe },
+            { id: 'advanced' as const, label: 'Avanzado & RCON', icon: Terminal },
             { id: 'custom' as const, label: 'Otras Claves', icon: HelpCircle }
           ].map((cat) => {
             const Icon = cat.icon;
@@ -609,12 +593,24 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
                   )}
 
                   {def.type === 'string' && (
-                    <input
-                      type="text"
-                      value={String(currentValue ?? '')}
-                      onChange={(e) => handleUpdate(def.key, e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-lg bg-nebula-950 border border-nebula-750 text-slate-200 text-xs font-mono focus:outline-none focus:border-nebula-accent"
-                    />
+                    <div className="relative flex items-center">
+                      <input
+                        type={def.key.includes('password') && !showPasswords[def.key] ? 'password' : 'text'}
+                        value={String(currentValue ?? '')}
+                        onChange={(e) => handleUpdate(def.key, e.target.value)}
+                        className="w-full px-3 py-1.5 rounded-lg bg-nebula-950 border border-nebula-750 text-slate-200 text-xs font-mono focus:outline-none focus:border-nebula-accent"
+                      />
+                      {def.key.includes('password') && (
+                        <button
+                          type="button"
+                          onClick={() => setShowPasswords((prev) => ({ ...prev, [def.key]: !prev[def.key] }))}
+                          className="absolute right-2.5 text-slate-400 hover:text-slate-200"
+                          title={showPasswords[def.key] ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        >
+                          {showPasswords[def.key] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

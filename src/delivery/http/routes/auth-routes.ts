@@ -11,11 +11,20 @@ export interface AuthRoutesOptions {
   authService: AuthService;
 }
 
+interface LoginAttemptRecord {
+  failures: number;
+  resetAt: number;
+}
+
+const LOGIN_WINDOW_MS = 60_000;
+const MAX_FAILED_ATTEMPTS = 10;
+
 export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (fastify, opts) => {
   const { authService } = opts;
   const authenticate = createAuthHook(authService);
+  const loginAttempts = new Map<string, LoginAttemptRecord>();
 
-  // Public: Login
+  // Public: Login (with Brute-Force Rate Limiting)
   fastify.post<{
     Body: { username: string; password: string };
   }>('/login', async (request, reply) => {
@@ -24,10 +33,30 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (fastify,
       return reply.status(400).send({ error: 'Usuario y contraseña requeridos' });
     }
 
+    const clientIp = request.ip || 'unknown';
+    const rateKey = `${clientIp}:${username.toLowerCase()}`;
+    const now = Date.now();
+    const record = loginAttempts.get(rateKey);
+
+    if (record && now < record.resetAt && record.failures >= MAX_FAILED_ATTEMPTS) {
+      const retryAfterSec = Math.ceil((record.resetAt - now) / 1000);
+      return reply.status(429).send({
+        error: `Demasiados intentos fallidos de inicio de sesión. Intenta nuevamente en ${retryAfterSec} segundos.`
+      });
+    }
+
     try {
       const result = await authService.login(username, password);
+      loginAttempts.delete(rateKey);
       return reply.status(200).send(result);
     } catch (err: unknown) {
+      const current = loginAttempts.get(rateKey);
+      if (!current || now >= current.resetAt) {
+        loginAttempts.set(rateKey, { failures: 1, resetAt: now + LOGIN_WINDOW_MS });
+      } else {
+        current.failures += 1;
+      }
+
       const message = err instanceof Error ? err.message : 'Error de autenticación';
       return reply.status(401).send({ error: message });
     }
