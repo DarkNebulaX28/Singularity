@@ -14,7 +14,8 @@ import type { CurseForgeProvider } from '../providers/curseforge-provider.js';
 import { isClientOnlyMod, pruneClientOnlyMods } from './client-mod-filter.js';
 import { extractZip } from './zip-extractor.js';
 
-const PLUGIN_LOADERS = new Set(['paper', 'purpur', 'spigot', 'bukkit']);
+const PLUGIN_LOADERS = new Set(['paper', 'purpur', 'spigot', 'bukkit', 'folia']);
+const MOD_LOADERS = new Set(['fabric', 'neoforge', 'forge', 'quilt']);
 
 function validateSafeDownloadUrl(rawUrl: string): string {
   let parsed: URL;
@@ -116,17 +117,47 @@ export class ContentInstallerService {
     }
   }
 
+  private async getWorldLevelName(instanceDir: string): Promise<string> {
+    try {
+      const propsPath = path.join(instanceDir, 'server.properties');
+      const raw = await fs.readFile(propsPath, 'utf8');
+      const match = raw.match(/^\s*level-name\s*=\s*(.+)$/m);
+      const levelName = match?.[1]?.trim();
+      if (levelName) {
+        const sanitized = path.basename(levelName).replace(/[^a-zA-Z0-9_-]/g, '');
+        if (sanitized) return sanitized;
+      }
+    } catch {
+      // Default to 'world' if server.properties doesn't exist yet
+    }
+    return 'world';
+  }
+
   /**
    * Computes the target subfolder considering both projectType and the server instance engine.
-   * On Paper/Purpur/Spigot servers, mods do not exist; all executable jars belong in plugins/.
+   * - Datapacks always go to datapacks/ (and sync to <level-name>/datapacks/).
+   * - Modpacks unpack at instance root ('').
+   * - On Paper/Purpur/Spigot servers, executable jars go to plugins/.
+   * - On Fabric/NeoForge/Forge/Quilt servers, executable jars go to mods/.
+   * - On Vanilla servers, content goes to datapacks/.
    */
   getSubfolder(projectType: ProjectType, serverLoader?: string | null): string {
-    if (serverLoader && PLUGIN_LOADERS.has(serverLoader.toLowerCase())) {
-      if (projectType === 'datapack') {
-        return 'datapacks';
-      }
-      // Any mod or plugin JAR installed on a Paper/Purpur/Spigot server must go to plugins/
+    if (projectType === 'datapack') {
+      return 'datapacks';
+    }
+    if (projectType === 'modpack') {
+      return '';
+    }
+
+    const cleanLoader = serverLoader?.toLowerCase();
+    if (cleanLoader && PLUGIN_LOADERS.has(cleanLoader)) {
       return 'plugins';
+    }
+    if (cleanLoader && MOD_LOADERS.has(cleanLoader)) {
+      return 'mods';
+    }
+    if (cleanLoader === 'vanilla') {
+      return 'datapacks';
     }
 
     switch (projectType) {
@@ -134,10 +165,6 @@ export class ContentInstallerService {
         return 'mods';
       case 'plugin':
         return 'plugins';
-      case 'datapack':
-        return 'datapacks';
-      case 'modpack':
-        return '';
       default:
         return 'mods';
     }
@@ -160,19 +187,21 @@ export class ContentInstallerService {
   async getManifest(instanceId: string): Promise<InstanceManifest> {
     const baseManifest = await this.getStoredManifest(instanceId);
 
-    // Scan actual files on disk in mods/, plugins/, and datapacks/
+    // Scan actual files on disk in mods/, plugins/, datapacks/, and <world>/datapacks/
     // to discover any custom user-uploaded .jar or .zip files
     const instanceDir = this.getInstanceDir(instanceId);
+    const levelName = await this.getWorldLevelName(instanceDir);
     const trackedFiles = new Set(baseManifest.installedItems.map((item) => item.fileName.toLowerCase()));
     const customItems: InstalledItem[] = [];
 
-    const foldersToScan: Array<{ folder: string; type: ProjectType }> = [
-      { folder: 'plugins', type: 'plugin' },
-      { folder: 'mods', type: 'mod' },
-      { folder: 'datapacks', type: 'datapack' }
+    const foldersToScan: Array<{ folder: string; labelFolder: string; type: ProjectType }> = [
+      { folder: 'plugins', labelFolder: 'plugins', type: 'plugin' },
+      { folder: 'mods', labelFolder: 'mods', type: 'mod' },
+      { folder: 'datapacks', labelFolder: 'datapacks', type: 'datapack' },
+      { folder: path.join(levelName, 'datapacks'), labelFolder: 'datapacks', type: 'datapack' }
     ];
 
-    for (const { folder, type } of foldersToScan) {
+    for (const { folder, labelFolder, type } of foldersToScan) {
       const folderPath = path.join(instanceDir, folder);
       try {
         const entries = await fs.readdir(folderPath, { withFileTypes: true });
@@ -197,7 +226,7 @@ export class ContentInstallerService {
                 versionId: 'local',
                 versionNumber: 'Personalizado',
                 fileName: entry.name,
-                destinationFolder: folder,
+                destinationFolder: labelFolder,
                 installedAt: mtime
               });
               trackedFiles.add(lowerName);
@@ -236,58 +265,203 @@ export class ContentInstallerService {
     const instanceDir = this.getInstanceDir(sanitizedRequest.instanceId);
     const serverLoader = await this.getInstanceLoader(sanitizedRequest.instanceId);
     const isPluginEngine = Boolean(serverLoader && PLUGIN_LOADERS.has(serverLoader));
+    const isModEngine = Boolean(serverLoader && MOD_LOADERS.has(serverLoader));
+    const isDatapackTarget =
+      sanitizedRequest.projectType === 'datapack' || serverLoader === 'vanilla';
 
-    // 1.5 Self-healing guard: if target server is Paper/Purpur/Spigot (Plugin engine)
+    const fnLower = sanitizedRequest.fileName.toLowerCase();
+
+    // 1A. Self-healing guard for DATAPACKS (or Vanilla servers):
+    // If installing a Datapack (e.g. Terralith, Incendium, Nullscape) or onto a Vanilla server,
+    // and the requested file is a .jar Mod/Plugin instead of a .zip Datapack, automatically resolve the Datapack .zip from Modrinth!
+    if (isDatapackTarget && fnLower.endsWith('.jar')) {
+      if (sanitizedRequest.providerId === 'modrinth') {
+        try {
+          const dpLoaders = JSON.stringify(['datapack']);
+          const resolveUrl = `https://api.modrinth.com/v2/project/${encodeURIComponent(sanitizedRequest.projectId)}/version?loaders=${encodeURIComponent(dpLoaders)}`;
+          const verRes = await fetch(resolveUrl, {
+            headers: { 'User-Agent': 'NebulaX-Singularity/0.1.0 (contact@nebulaxstudio.top)' }
+          });
+          if (verRes.ok) {
+            const dpVersions = (await verRes.json()) as Array<{
+              id: string;
+              version_number: string;
+              files: Array<{ url: string; filename: string; primary?: boolean }>;
+            }>;
+            const bestDpVer = dpVersions[0];
+            const zipFile =
+              bestDpVer?.files?.find((f) => f.filename.toLowerCase().endsWith('.zip')) ??
+              bestDpVer?.files?.find((f) => f.primary) ??
+              bestDpVer?.files?.[0];
+            if (bestDpVer && zipFile?.url && zipFile?.filename) {
+              sanitizedRequest = {
+                ...sanitizedRequest,
+                versionId: bestDpVer.id,
+                versionNumber: bestDpVer.version_number,
+                fileName: path.basename(zipFile.filename),
+                downloadUrl: validateSafeDownloadUrl(zipFile.url),
+                projectType: 'datapack'
+              };
+            } else {
+              throw new Error(
+                `El archivo '${sanitizedRequest.fileName}' es un Mod/Plugin (.jar) y este proyecto no dispone de una versión Datapack (.zip) compatible.`
+              );
+            }
+          }
+        } catch (err: unknown) {
+          if (err instanceof Error && err.message.includes('no dispone de una versión Datapack')) {
+            throw err;
+          }
+        }
+      } else if (!sanitizedRequest.force) {
+        throw new Error(
+          `El archivo '${sanitizedRequest.fileName}' es un archivo ejecutable (.jar) y no puede instalarse como Datapack (.zip).`
+        );
+      }
+    }
+
+    // 1B. Self-healing guard for PLUGIN ENGINES (Paper/Purpur/Spigot/Bukkit):
+    // If target server is a Plugin engine and not installing a datapack/modpack,
     // but the requested fileName is explicitly a Mod loader build (e.g. Chunky-Fabric or Chunky-NeoForge),
     // automatically resolve the Bukkit/Paper/Spigot plugin build from Modrinth or reject incompatible mod JARs.
-    const fnLower = sanitizedRequest.fileName.toLowerCase();
     const isExplicitModJar =
       /(?:^|[-_.])(fabric|neoforge|forge|quilt)(?:[-_.]|\.jar$)/i.test(fnLower) &&
       !/(bukkit|spigot|paper|purpur|folia)/i.test(fnLower);
 
-    if (isPluginEngine && isExplicitModJar && sanitizedRequest.providerId === 'modrinth') {
-      try {
-        const pluginLoaders = JSON.stringify(['paper', 'purpur', 'spigot', 'bukkit', 'folia']);
-        const resolveUrl = `https://api.modrinth.com/v2/project/${encodeURIComponent(sanitizedRequest.projectId)}/version?loaders=${encodeURIComponent(pluginLoaders)}`;
-        const verRes = await fetch(resolveUrl, {
-          headers: { 'User-Agent': 'NebulaX-Singularity/0.1.0 (contact@nebulaxstudio.top)' }
-        });
-        if (verRes.ok) {
-          const pluginVersions = (await verRes.json()) as Array<{
-            id: string;
-            version_number: string;
-            files: Array<{ url: string; filename: string; primary?: boolean }>;
-          }>;
-          const bestPluginVer = pluginVersions[0];
-          const primaryFile = bestPluginVer?.files?.find((f) => f.primary) ?? bestPluginVer?.files?.[0];
-          if (bestPluginVer && primaryFile?.url && primaryFile?.filename) {
-            sanitizedRequest = {
-              ...sanitizedRequest,
-              versionId: bestPluginVer.id,
-              versionNumber: bestPluginVer.version_number,
-              fileName: path.basename(primaryFile.filename),
-              downloadUrl: validateSafeDownloadUrl(primaryFile.url),
-              projectType: 'plugin'
-            };
-          } else {
-            throw new Error(
-              `El archivo '${sanitizedRequest.fileName}' es un Mod (Fabric/Forge/NeoForge) y este proyecto no dispone de una versión de Plugin compatible con ${serverLoader?.toUpperCase()}.`
-            );
+    if (
+      !isDatapackTarget &&
+      sanitizedRequest.projectType !== 'modpack' &&
+      isPluginEngine &&
+      isExplicitModJar
+    ) {
+      if (sanitizedRequest.providerId === 'modrinth') {
+        try {
+          const pluginLoaders = JSON.stringify(['paper', 'purpur', 'spigot', 'bukkit', 'folia']);
+          const resolveUrl = `https://api.modrinth.com/v2/project/${encodeURIComponent(sanitizedRequest.projectId)}/version?loaders=${encodeURIComponent(pluginLoaders)}`;
+          const verRes = await fetch(resolveUrl, {
+            headers: { 'User-Agent': 'NebulaX-Singularity/0.1.0 (contact@nebulaxstudio.top)' }
+          });
+          if (verRes.ok) {
+            const pluginVersions = (await verRes.json()) as Array<{
+              id: string;
+              version_number: string;
+              files: Array<{ url: string; filename: string; primary?: boolean }>;
+            }>;
+            const bestPluginVer = pluginVersions[0];
+            const primaryFile =
+              bestPluginVer?.files?.find((f) => f.filename.toLowerCase().endsWith('.jar') && f.primary) ??
+              bestPluginVer?.files?.find((f) => f.primary) ??
+              bestPluginVer?.files?.[0];
+            if (bestPluginVer && primaryFile?.url && primaryFile?.filename) {
+              sanitizedRequest = {
+                ...sanitizedRequest,
+                versionId: bestPluginVer.id,
+                versionNumber: bestPluginVer.version_number,
+                fileName: path.basename(primaryFile.filename),
+                downloadUrl: validateSafeDownloadUrl(primaryFile.url),
+                projectType: 'plugin'
+              };
+            } else {
+              throw new Error(
+                `El archivo '${sanitizedRequest.fileName}' es un Mod (Fabric/Forge/NeoForge) y este proyecto no dispone de una versión de Plugin compatible con ${serverLoader?.toUpperCase()}.`
+              );
+            }
+          }
+        } catch (err: unknown) {
+          if (err instanceof Error && err.message.includes('no dispone de una versión de Plugin')) {
+            throw err;
           }
         }
-      } catch (err: unknown) {
-        if (err instanceof Error && err.message.includes('no dispone de una versión de Plugin')) {
-          throw err;
-        }
+      } else if (!sanitizedRequest.force) {
+        throw new Error(
+          `El archivo '${sanitizedRequest.fileName}' es una versión de Mod (Fabric/Forge/NeoForge) y no puede ejecutarse como Plugin en un servidor ${serverLoader?.toUpperCase()}. Selecciona la edición Bukkit/Paper/Spigot.`
+        );
       }
-    } else if (isPluginEngine && isExplicitModJar && !sanitizedRequest.force) {
-      throw new Error(
-        `El archivo '${sanitizedRequest.fileName}' es una versión de Mod (Fabric/Forge/NeoForge) y no puede ejecutarse como Plugin en un servidor ${serverLoader?.toUpperCase()}. Selecciona la edición Bukkit/Paper/Spigot.`
-      );
     }
 
-    // 1. Client-only mod prevention for dedicated servers
-    const isModOnModEngine = !isPluginEngine && (sanitizedRequest.projectType === 'mod' || !sanitizedRequest.projectType);
+    // 1C. Self-healing guard for MOD ENGINES (Fabric/NeoForge/Forge/Quilt):
+    // If target server is a Mod engine (e.g. Fabric or NeoForge) and not installing a datapack/modpack,
+    // but the requested fileName is explicitly a Plugin JAR (Bukkit/Paper/Spigot) or a DIFFERENT Mod Loader JAR (e.g. Forge on Fabric, or Fabric on NeoForge),
+    // automatically resolve the matching Mod Loader build from Modrinth!
+    if (
+      !isDatapackTarget &&
+      sanitizedRequest.projectType !== 'modpack' &&
+      isModEngine &&
+      serverLoader
+    ) {
+      const targetModRegex = new RegExp(
+        `(?:^|[-_.])${serverLoader === 'quilt' ? '(quilt|fabric)' : serverLoader}(?:[-_.]|\\.jar$)`,
+        'i'
+      );
+      const hasTargetModToken = targetModRegex.test(fnLower);
+
+      const isExplicitPluginJar =
+        /(?:^|[-_.])(bukkit|spigot|paper|purpur|folia)(?:[-_.]|\.jar$)/i.test(fnLower) &&
+        !hasTargetModToken;
+
+      const otherModLoaders = ['fabric', 'neoforge', 'forge', 'quilt'].filter(
+        (l) => l !== serverLoader && !(serverLoader === 'quilt' && l === 'fabric')
+      );
+      const isWrongModLoaderJar =
+        !hasTargetModToken &&
+        otherModLoaders.some((l) =>
+          new RegExp(`(?:^|[-_.])${l}(?:[-_.]|\\.jar$)`, 'i').test(fnLower)
+        );
+
+      if (isExplicitPluginJar || isWrongModLoaderJar) {
+        if (sanitizedRequest.providerId === 'modrinth') {
+          try {
+            const modLoaders = JSON.stringify(
+              serverLoader === 'quilt' ? ['quilt', 'fabric'] : [serverLoader]
+            );
+            const resolveUrl = `https://api.modrinth.com/v2/project/${encodeURIComponent(sanitizedRequest.projectId)}/version?loaders=${encodeURIComponent(modLoaders)}`;
+            const verRes = await fetch(resolveUrl, {
+              headers: { 'User-Agent': 'NebulaX-Singularity/0.1.0 (contact@nebulaxstudio.top)' }
+            });
+            if (verRes.ok) {
+              const modVersions = (await verRes.json()) as Array<{
+                id: string;
+                version_number: string;
+                files: Array<{ url: string; filename: string; primary?: boolean }>;
+              }>;
+              const bestModVer = modVersions[0];
+              const primaryFile =
+                bestModVer?.files?.find((f) => f.filename.toLowerCase().endsWith('.jar') && f.primary) ??
+                bestModVer?.files?.find((f) => f.primary) ??
+                bestModVer?.files?.[0];
+              if (bestModVer && primaryFile?.url && primaryFile?.filename) {
+                sanitizedRequest = {
+                  ...sanitizedRequest,
+                  versionId: bestModVer.id,
+                  versionNumber: bestModVer.version_number,
+                  fileName: path.basename(primaryFile.filename),
+                  downloadUrl: validateSafeDownloadUrl(primaryFile.url),
+                  projectType: 'mod'
+                };
+              } else {
+                throw new Error(
+                  `El archivo '${sanitizedRequest.fileName}' no es compatible con ${serverLoader.toUpperCase()} y este proyecto no dispone de una versión de Mod para ${serverLoader.toUpperCase()}.`
+                );
+              }
+            }
+          } catch (err: unknown) {
+            if (err instanceof Error && err.message.includes('no dispone de una versión de Mod')) {
+              throw err;
+            }
+          }
+        } else if (!sanitizedRequest.force) {
+          throw new Error(
+            `El archivo '${sanitizedRequest.fileName}' pertenece a otro cargador y no puede ejecutarse en un servidor ${serverLoader.toUpperCase()}. Selecciona la versión para ${serverLoader.toUpperCase()}.`
+          );
+        }
+      }
+    }
+
+    // 1D. Client-only mod prevention for dedicated servers
+    const isModOnModEngine =
+      !isPluginEngine &&
+      !isDatapackTarget &&
+      (sanitizedRequest.projectType === 'mod' || !sanitizedRequest.projectType);
     if (!sanitizedRequest.force && isModOnModEngine) {
       if (isClientOnlyMod(sanitizedRequest.fileName) || isClientOnlyMod(sanitizedRequest.projectId)) {
         throw new Error(
@@ -296,18 +470,23 @@ export class ContentInstallerService {
       }
     }
 
-    // 2. Modpack / ZIP Archive extraction workflow (.zip or .mrpack)
+    // 2. Modpack / ZIP Archive extraction workflow (.mrpack or .zip when NOT a datapack)
     const isModpack =
       sanitizedRequest.projectType === 'modpack' ||
-      sanitizedRequest.fileName.toLowerCase().endsWith('.zip') ||
-      sanitizedRequest.fileName.toLowerCase().endsWith('.mrpack');
+      sanitizedRequest.fileName.toLowerCase().endsWith('.mrpack') ||
+      (sanitizedRequest.projectType !== 'datapack' &&
+        !isDatapackTarget &&
+        sanitizedRequest.fileName.toLowerCase().endsWith('.zip'));
 
     if (isModpack) {
       return this.installModpack(instanceDir, sanitizedRequest);
     }
 
-    // 3. Single JAR / Datapack file installation workflow
-    const subfolder = this.getSubfolder(sanitizedRequest.projectType, serverLoader);
+    // 3. Single JAR / Datapack (.zip) file installation workflow
+    const effectiveInputType: ProjectType = isDatapackTarget
+      ? 'datapack'
+      : sanitizedRequest.projectType;
+    const subfolder = this.getSubfolder(effectiveInputType, serverLoader);
     const destinationDir = path.join(instanceDir, subfolder);
     await fs.mkdir(destinationDir, { recursive: true });
 
@@ -332,8 +511,27 @@ export class ContentInstallerService {
     await pipeline(Readable.fromWeb(res.body as WebReadableStream), fileStream);
     await fs.rename(tempPath, finalPath);
 
-    // If destination was forced to plugins/ due to Paper engine, record effective type
-    const effectiveProjectType = subfolder === 'plugins' ? 'plugin' : sanitizedRequest.projectType;
+    // If installing a datapack, also mirror it into <level-name>/datapacks/ so Minecraft loads it automatically
+    if (subfolder === 'datapacks') {
+      try {
+        const levelName = await this.getWorldLevelName(instanceDir);
+        const worldDatapacksDir = path.join(instanceDir, levelName, 'datapacks');
+        await fs.mkdir(worldDatapacksDir, { recursive: true });
+        await fs.copyFile(finalPath, path.join(worldDatapacksDir, sanitizedRequest.fileName));
+      } catch {
+        // Non-fatal if world directory cannot be written
+      }
+    }
+
+    // Record accurate effective type based on destination subfolder
+    const effectiveProjectType: ProjectType =
+      subfolder === 'plugins'
+        ? 'plugin'
+        : subfolder === 'datapacks'
+        ? 'datapack'
+        : subfolder === 'mods'
+        ? 'mod'
+        : sanitizedRequest.projectType;
 
     const installedItem: InstalledItem = {
       id: `${sanitizedRequest.providerId}-${sanitizedRequest.projectId}`,
@@ -534,14 +732,25 @@ export class ContentInstallerService {
       return;
     }
 
+    const instanceDir = this.getInstanceDir(instanceId);
     const serverLoader = await this.getInstanceLoader(instanceId);
     const subfolder = itemToUninstall.destinationFolder ?? this.getSubfolder(itemToUninstall.projectType, serverLoader);
-    const filePath = path.join(this.getInstanceDir(instanceId), subfolder, itemToUninstall.fileName);
+    const filePath = path.join(instanceDir, subfolder, itemToUninstall.fileName);
 
     try {
       await fs.unlink(filePath);
     } catch {
       // Ignore if already deleted from disk
+    }
+
+    if (subfolder === 'datapacks' || itemToUninstall.projectType === 'datapack') {
+      try {
+        const levelName = await this.getWorldLevelName(instanceDir);
+        const worldDpPath = path.join(instanceDir, levelName, 'datapacks', itemToUninstall.fileName);
+        await fs.unlink(worldDpPath);
+      } catch {
+        // Ignore if not in world/datapacks
+      }
     }
 
     const updatedItems = manifest.installedItems.filter(

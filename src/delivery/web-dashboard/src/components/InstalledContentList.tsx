@@ -52,14 +52,19 @@ export const InstalledContentList: React.FC<InstalledContentListProps> = ({
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'plugin' | 'mod' | 'custom'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'plugin' | 'mod' | 'datapack' | 'custom'>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isPluginEngine = Boolean(
     loader && ['paper', 'purpur', 'spigot', 'bukkit'].includes(loader.toLowerCase())
   );
-  const defaultFolder = isPluginEngine ? 'plugins' : 'mods';
-  const uploadButtonLabel = isPluginEngine ? 'Subir Plugin (.jar)' : 'Subir Mod (.jar)';
+  const isVanillaEngine = Boolean(loader && loader.toLowerCase() === 'vanilla');
+  const defaultFolder = isVanillaEngine ? 'datapacks' : isPluginEngine ? 'plugins' : 'mods';
+  const uploadButtonLabel = isVanillaEngine
+    ? 'Subir Datapack (.zip)'
+    : isPluginEngine
+    ? 'Subir Plugin (.jar) / Datapack (.zip)'
+    : 'Subir Mod (.jar) / Datapack (.zip)';
 
   const fetchInstalled = useCallback(async (quiet = false) => {
     if (!quiet) setIsRefreshing(true);
@@ -81,16 +86,40 @@ export const InstalledContentList: React.FC<InstalledContentListProps> = ({
   const handleUploadFiles = async (files: FileList | File[]) => {
     if (!files || files.length === 0) return;
     setIsUploading(true);
-    setUploadStatus(`Subiendo ${files.length} archivo(s) a /${defaultFolder}...`);
+
+    const jarFiles: File[] = [];
+    const zipFiles: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      if (!f) continue;
+      if (f.name.toLowerCase().endsWith('.zip')) {
+        zipFiles.push(f);
+      } else {
+        jarFiles.push(f);
+      }
+    }
+
+    const targetFoldersDesc: string[] = [];
+    if (jarFiles.length > 0) targetFoldersDesc.push(`/${defaultFolder}`);
+    if (zipFiles.length > 0) targetFoldersDesc.push('/datapacks');
+
+    setUploadStatus(
+      `Subiendo ${files.length} archivo(s) a ${targetFoldersDesc.join(' y ')}...`
+    );
 
     try {
-      const formData = new FormData();
-      for (let i = 0; i < files.length; i++) {
-        formData.append('files', files[i]);
+      if (jarFiles.length > 0) {
+        const jarData = new FormData();
+        for (const jf of jarFiles) jarData.append('files', jf);
+        await api.upload(`/servers/${serverId}/files/upload?path=${defaultFolder}`, jarData);
+      }
+      if (zipFiles.length > 0) {
+        const zipData = new FormData();
+        for (const zf of zipFiles) zipData.append('files', zf);
+        await api.upload(`/servers/${serverId}/files/upload?path=datapacks`, zipData);
       }
 
-      await api.upload(`/servers/${serverId}/files/upload?path=${defaultFolder}`, formData);
-      const msg = `¡${files.length} archivo(s) instalado(s) en /${defaultFolder} con éxito!`;
+      const msg = `¡${files.length} archivo(s) instalado(s) en ${targetFoldersDesc.join(' y ')} con éxito!`;
       setUploadStatus(msg);
       toast(msg, 'success');
       await fetchInstalled(true);
@@ -137,6 +166,9 @@ export const InstalledContentList: React.FC<InstalledContentListProps> = ({
         return false;
       }
       if (typeFilter === 'mod' && item.projectType !== 'mod' && item.destinationFolder !== 'mods') {
+        return false;
+      }
+      if (typeFilter === 'datapack' && item.projectType !== 'datapack' && item.destinationFolder !== 'datapacks') {
         return false;
       }
       if (typeFilter === 'custom' && item.providerId !== 'custom') {
@@ -199,13 +231,13 @@ export const InstalledContentList: React.FC<InstalledContentListProps> = ({
         <div>
           <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
             <Package className="w-4 h-4 text-nebula-purple" />
-            <span>Mods y Plugins Instalados</span>
+            <span>Mods, Plugins y Datapacks Instalados</span>
             <span className="px-2 py-0.5 rounded text-[10px] font-mono tabular-nums bg-nebula-800 text-nebula-accent border border-nebula-700">
               {items.length} archivos
             </span>
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Arrastra archivos <code className="text-nebula-cyber font-mono">.jar</code> aquí o gestiona el directorio <code className="text-slate-300 font-mono">/{defaultFolder}</code>.
+            Arrastra archivos <code className="text-nebula-cyber font-mono">.jar</code> o <code className="text-amber-300 font-mono">.zip</code> aquí o gestiona <code className="text-slate-300 font-mono">/{defaultFolder}</code> y <code className="text-slate-300 font-mono">/datapacks</code>.
           </p>
         </div>
 
@@ -294,6 +326,7 @@ export const InstalledContentList: React.FC<InstalledContentListProps> = ({
               { id: 'all' as const, label: 'Todos' },
               { id: 'plugin' as const, label: 'Plugins' },
               { id: 'mod' as const, label: 'Mods' },
+              { id: 'datapack' as const, label: 'Datapacks' },
               { id: 'custom' as const, label: 'Subidos Manual' }
             ].map((f) => (
               <button
@@ -360,6 +393,8 @@ export const InstalledContentList: React.FC<InstalledContentListProps> = ({
                       className={`text-[9px] font-mono px-1.5 py-0.2 rounded uppercase font-bold border ${
                         item.destinationFolder === 'plugins' || item.projectType === 'plugin'
                           ? 'bg-nebula-cyber/15 text-nebula-cyber border-nebula-cyber/30'
+                          : item.destinationFolder === 'datapacks' || item.projectType === 'datapack'
+                          ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
                           : 'bg-blue-500/15 text-blue-300 border-blue-500/30'
                       }`}
                     >

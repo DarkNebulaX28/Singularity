@@ -33,22 +33,36 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   };
 
   const isClientMod = isClientOnlyMod(item.slug) || isClientOnlyMod(item.title);
+  const lowerCategories = (item.categories ?? []).map((c) => c.toLowerCase());
+
   const hasPluginSupport =
     item.projectType === 'plugin' ||
-    Boolean(item.categories?.some((c) => ['spigot', 'paper', 'purpur', 'bukkit', 'folia'].includes(c.toLowerCase())));
+    lowerCategories.some((c) => ['spigot', 'paper', 'purpur', 'bukkit', 'folia'].includes(c));
   const hasModSupport =
-    item.projectType === 'mod' &&
-    Boolean(item.categories?.some((c) => ['fabric', 'forge', 'neoforge', 'quilt'].includes(c.toLowerCase())));
-  const isDualPluginAndMod = hasPluginSupport && hasModSupport;
-  const isPlugin = item.projectType === 'plugin' || (hasPluginSupport && !hasModSupport);
+    lowerCategories.some((c) => ['fabric', 'forge', 'neoforge', 'quilt'].includes(c)) ||
+    (item.projectType === 'mod' && !hasPluginSupport && !lowerCategories.includes('datapack'));
+  const hasDatapackSupport =
+    item.projectType === 'datapack' || lowerCategories.includes('datapack');
 
-  const effectiveType = isPlugin ? 'plugin' : item.projectType;
+  const isDualPluginAndMod = hasPluginSupport && hasModSupport;
+  const isDualModAndDatapack = hasModSupport && hasDatapackSupport && !hasPluginSupport;
+  const isPlugin = item.projectType === 'plugin' || (hasPluginSupport && !hasModSupport && !hasDatapackSupport);
+  const isDatapack =
+    item.projectType === 'datapack' || (hasDatapackSupport && !hasModSupport && !hasPluginSupport);
+
+  const effectiveType = isDatapack ? 'datapack' : isPlugin ? 'plugin' : item.projectType;
 
   const typeConfig = isDualPluginAndMod
     ? {
         label: item.projectType === 'plugin' ? 'PLUGIN + MOD' : 'MOD + PLUGIN',
         icon: Package,
         color: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/40'
+      }
+    : isDualModAndDatapack
+    ? {
+        label: item.projectType === 'datapack' ? 'DATAPACK + MOD' : 'MOD + DATAPACK',
+        icon: Database,
+        color: 'text-amber-300 bg-amber-500/15 border-amber-500/40'
       }
     : {
         mod: { label: 'MOD', icon: Box, color: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },

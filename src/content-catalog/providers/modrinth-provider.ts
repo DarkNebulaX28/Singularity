@@ -88,6 +88,10 @@ export class ModrinthProvider implements IContentProvider {
         'categories:neoforge',
         'categories:quilt'
       ]);
+    } else if (query.projectType === 'datapack') {
+      // On Modrinth, datapacks (including hybrid mod+datapack projects like Terralith, Incendium, Tectonic)
+      // use either project_type:datapack or categories:datapack.
+      facets.push(['project_type:datapack', 'categories:datapack']);
     } else if (query.projectType) {
       facets.push([`project_type:${query.projectType}`]);
     }
@@ -102,6 +106,8 @@ export class ModrinthProvider implements IContentProvider {
           'categories:purpur',
           'categories:folia'
         ]);
+      } else if (cleanLoader === 'datapack' || cleanLoader === 'vanilla') {
+        facets.push(['project_type:datapack', 'categories:datapack']);
       } else {
         facets.push([`categories:${cleanLoader}`]);
       }
@@ -130,6 +136,13 @@ export class ModrinthProvider implements IContentProvider {
     const isRequestingPlugin =
       query.projectType === 'plugin' ||
       Boolean(query.loader && PLUGIN_LOADERS.includes(query.loader.toLowerCase()));
+    const isRequestingMod =
+      query.projectType === 'mod' ||
+      Boolean(query.loader && MOD_LOADERS.includes(query.loader.toLowerCase()));
+    const isRequestingDatapack =
+      query.projectType === 'datapack' ||
+      query.loader?.toLowerCase() === 'datapack' ||
+      query.loader?.toLowerCase() === 'vanilla';
 
     const items: CatalogItem[] = data.hits
       .filter((hit) => {
@@ -145,12 +158,21 @@ export class ModrinthProvider implements IContentProvider {
         const isModCategory = hit.categories?.some((c) =>
           MOD_LOADERS.includes(c.toLowerCase())
         );
+        const isDatapackCategory =
+          hit.project_type === 'datapack' ||
+          hit.categories?.some((c) => c.toLowerCase() === 'datapack');
 
         let effectiveProjectType = (hit.project_type ?? 'mod') as ProjectType;
-        if (isRequestingPlugin && isPluginCategory) {
+        if (isRequestingDatapack && isDatapackCategory) {
+          effectiveProjectType = 'datapack';
+        } else if (isRequestingPlugin && isPluginCategory) {
           effectiveProjectType = 'plugin';
+        } else if (isRequestingMod && isModCategory) {
+          effectiveProjectType = 'mod';
         } else if (effectiveProjectType === 'mod' && isPluginCategory && !isModCategory) {
           effectiveProjectType = 'plugin';
+        } else if (effectiveProjectType === 'mod' && isDatapackCategory && !isModCategory && !isPluginCategory) {
+          effectiveProjectType = 'datapack';
         }
 
         return {
@@ -183,10 +205,20 @@ export class ModrinthProvider implements IContentProvider {
     const cleanLoader = loader?.toLowerCase().trim();
     const isPluginLoader = Boolean(cleanLoader && PLUGIN_LOADERS.includes(cleanLoader));
     const isModLoader = Boolean(cleanLoader && MOD_LOADERS.includes(cleanLoader));
+    const isDatapackLoader = cleanLoader === 'datapack' || cleanLoader === 'vanilla';
 
-    // Expand plugin loaders so a Paper/Purpur/Spigot server matches Bukkit/Spigot/Paper plugin JARs (e.g. Chunky-Bukkit)
+    // Expand loader filter list according to target engine ecosystem:
+    // - Plugin servers (Paper/Purpur/Spigot) match Bukkit/Spigot/Paper/Purpur/Folia plugin builds
+    // - Datapack/Vanilla requests match 'datapack' builds (.zip)
+    // - Mod servers (Fabric/NeoForge/Forge/Quilt) match that specific mod loader
     const loaderFilterList = isPluginLoader
       ? ['paper', 'purpur', 'spigot', 'bukkit', 'folia']
+      : isDatapackLoader
+      ? ['datapack']
+      : isModLoader && cleanLoader
+      ? cleanLoader === 'quilt'
+        ? ['quilt', 'fabric']
+        : [cleanLoader]
       : cleanLoader
       ? [cleanLoader]
       : undefined;
@@ -213,7 +245,10 @@ export class ModrinthProvider implements IContentProvider {
     let versions = (await res.json()) as ModrinthVersionResponse[];
 
     // Fallback 1: If exact gameVersion + loader returned 0 results, keep the loader filter and relax only gameVersion!
-    // This ensures a Paper/Spigot server NEVER falls back to downloading a Fabric/NeoForge mod JAR.
+    // This ensures:
+    // - A Paper/Spigot server NEVER falls back to downloading a Fabric/NeoForge mod JAR.
+    // - A Fabric/NeoForge/Forge server NEVER falls back to downloading a Bukkit plugin or wrong mod loader JAR.
+    // - A Datapack request NEVER falls back to downloading a .jar mod instead of the .zip datapack.
     if (versions.length === 0 && gameVersion && loaderFilterList) {
       const loaderOnlyParams = new URLSearchParams();
       loaderOnlyParams.set('loaders', JSON.stringify(loaderFilterList));
@@ -228,7 +263,7 @@ export class ModrinthProvider implements IContentProvider {
       }
     }
 
-    // Fallback 2: Only if still empty (e.g., datapacks or universal packages), fetch all versions and filter incompatible loaders
+    // Fallback 2: Only if still empty (e.g., universal packages), fetch all versions and filter by compatible ecosystem
     if (versions.length === 0 && (gameVersion || loaderFilterList)) {
       const fallbackUrl = `${this.baseUrl}/project/${encodeURIComponent(projectId)}/version`;
       const fallbackRes = await fetch(fallbackUrl, {
@@ -238,14 +273,25 @@ export class ModrinthProvider implements IContentProvider {
       });
       if (fallbackRes.ok) {
         const allVersions = (await fallbackRes.json()) as ModrinthVersionResponse[];
-        if (isPluginLoader) {
+        if (isDatapackLoader) {
+          const datapackCompatible = allVersions.filter(
+            (v) =>
+              v.loaders?.some((l) => l.toLowerCase() === 'datapack') ||
+              v.files?.some((f) => f.filename.toLowerCase().endsWith('.zip'))
+          );
+          versions = datapackCompatible.length > 0 ? datapackCompatible : allVersions;
+        } else if (isPluginLoader) {
           const pluginCompatible = allVersions.filter((v) =>
             v.loaders?.some((l) => PLUGIN_LOADERS.includes(l.toLowerCase()))
           );
           versions = pluginCompatible.length > 0 ? pluginCompatible : allVersions;
         } else if (isModLoader && cleanLoader) {
           const modCompatible = allVersions.filter((v) =>
-            v.loaders?.some((l) => l.toLowerCase() === cleanLoader)
+            v.loaders?.some(
+              (l) =>
+                l.toLowerCase() === cleanLoader ||
+                (cleanLoader === 'quilt' && l.toLowerCase() === 'fabric')
+            )
           );
           versions = modCompatible.length > 0 ? modCompatible : allVersions;
         } else {
@@ -255,7 +301,14 @@ export class ModrinthProvider implements IContentProvider {
     }
 
     return versions.map((v) => {
-      const primaryFile = v.files.find((f) => f.primary) ?? v.files[0];
+      // Prefer .zip file when requesting a datapack, or .jar when requesting a mod/plugin
+      const preferredFile = isDatapackLoader
+        ? v.files.find((f) => f.filename.toLowerCase().endsWith('.zip'))
+        : isPluginLoader || isModLoader
+        ? v.files.find((f) => f.filename.toLowerCase().endsWith('.jar') && f.primary) ??
+          v.files.find((f) => f.filename.toLowerCase().endsWith('.jar'))
+        : undefined;
+      const primaryFile = preferredFile ?? v.files.find((f) => f.primary) ?? v.files[0];
 
       const dependencies: VersionDependency[] = (v.dependencies ?? [])
         .filter((d) => d.project_id !== null)
@@ -265,6 +318,8 @@ export class ModrinthProvider implements IContentProvider {
           dependencyType: d.dependency_type
         }));
 
+      const fallbackExt = isDatapackLoader ? 'zip' : 'jar';
+
       return {
         id: v.id,
         projectId: v.project_id,
@@ -272,7 +327,7 @@ export class ModrinthProvider implements IContentProvider {
         versionNumber: v.version_number,
         gameVersions: v.game_versions,
         loaders: v.loaders,
-        fileName: primaryFile?.filename ?? `${v.name}.jar`,
+        fileName: primaryFile?.filename ?? `${v.name}.${fallbackExt}`,
         downloadUrl: primaryFile?.url ?? '',
         size: primaryFile?.size ?? 0,
         hashes: {

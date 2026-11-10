@@ -253,17 +253,39 @@ export class CurseForgeProvider implements IContentProvider {
 
     // Optional loader filter with graceful fallback
     if (loader) {
-      const cleanLoader = loader.toLowerCase();
+      const cleanLoader = loader.toLowerCase().trim();
       const isPlugin = ['paper', 'purpur', 'spigot', 'bukkit', 'folia'].includes(cleanLoader);
+      const isDatapack = cleanLoader === 'datapack' || cleanLoader === 'vanilla';
+      const isMod = ['fabric', 'neoforge', 'forge', 'quilt'].includes(cleanLoader);
+
       const matchingLoader = files.filter((f) => {
         const gvLower = (f.gameVersions ?? []).map((g) => g.toLowerCase());
         const fnLower = f.fileName.toLowerCase();
+
+        if (isDatapack) {
+          return fnLower.endsWith('.zip') || gvLower.includes('datapack');
+        }
+
         if (isPlugin) {
-          const hasPluginTag = gvLower.some((g) => ['bukkit', 'spigot', 'paper', 'purpur', 'folia'].includes(g)) ||
-            fnLower.includes('bukkit') || fnLower.includes('paper') || fnLower.includes('spigot');
-          const hasOnlyModTag = (fnLower.includes('fabric') || fnLower.includes('neoforge') || fnLower.includes('forge')) && !hasPluginTag;
+          const hasPluginTag =
+            gvLower.some((g) => ['bukkit', 'spigot', 'paper', 'purpur', 'folia'].includes(g)) ||
+            fnLower.includes('bukkit') ||
+            fnLower.includes('paper') ||
+            fnLower.includes('spigot');
+          const hasOnlyModTag =
+            (fnLower.includes('fabric') || fnLower.includes('neoforge') || fnLower.includes('forge')) &&
+            !hasPluginTag;
           return hasPluginTag || !hasOnlyModTag;
         }
+
+        if (isMod) {
+          if (gvLower.includes(cleanLoader)) return true;
+          if (cleanLoader === 'quilt' && gvLower.includes('fabric')) return true;
+          // Use boundary check so 'forge' never falsely matches 'neoforge'
+          const exactTokenRegex = new RegExp(`(?:^|[-_.])${cleanLoader}(?:[-_.]|\\.jar$)`, 'i');
+          return exactTokenRegex.test(fnLower);
+        }
+
         return gvLower.includes(cleanLoader) || fnLower.includes(cleanLoader);
       });
       if (matchingLoader.length > 0) {

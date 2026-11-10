@@ -251,4 +251,101 @@ describe('ContentInstallerService', () => {
     const existsInMods = await fs.access(safePath).then(() => true).catch(() => false);
     expect(existsInMods).toBe(true);
   });
+
+  it('should install a .zip datapack into datapacks/ and world/datapacks/ without treating it as a modpack', async () => {
+    await fs.writeFile(
+      path.join(instanceDir, 'singularity-instance.json'),
+      JSON.stringify({ loader: 'paper', gameVersion: '1.21.4' })
+    );
+
+    const mockZipContent = Buffer.from('mock-datapack-zip-bytes');
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: createMockStream(mockZipContent)
+    } as unknown as Response);
+
+    const request: InstallContentRequest = {
+      instanceId,
+      providerId: 'modrinth',
+      projectId: 'terralith',
+      projectType: 'datapack',
+      versionId: 'ver_dp_1',
+      versionNumber: '2.5.8',
+      fileName: 'Terralith_1.21_v2.5.8.zip',
+      downloadUrl: 'https://cdn.modrinth.com/data/terralith/Terralith_1.21_v2.5.8.zip'
+    };
+
+    const installed = await installer.install(request);
+
+    expect(installed.projectType).toBe('datapack');
+    expect(installed.destinationFolder).toBe('datapacks');
+    expect(installed.fileName).toBe('Terralith_1.21_v2.5.8.zip');
+
+    // Verify it exists in both /datapacks and /world/datapacks
+    const dpRootFile = path.join(instanceDir, 'datapacks', 'Terralith_1.21_v2.5.8.zip');
+    const dpWorldFile = path.join(instanceDir, 'world', 'datapacks', 'Terralith_1.21_v2.5.8.zip');
+
+    const inDpRoot = await fs.access(dpRootFile).then(() => true).catch(() => false);
+    const inDpWorld = await fs.access(dpWorldFile).then(() => true).catch(() => false);
+
+    expect(inDpRoot).toBe(true);
+    expect(inDpWorld).toBe(true);
+  });
+
+  it('should self-heal when installing a hybrid project onto a Fabric mod server if a Bukkit/Forge jar was passed', async () => {
+    await fs.writeFile(
+      path.join(instanceDir, 'singularity-instance.json'),
+      JSON.stringify({ loader: 'fabric', gameVersion: '1.21.4' })
+    );
+
+    const mockJarContent = Buffer.from('mock-chunky-fabric-jar');
+    globalThis.fetch = vi
+      .fn()
+      // Call 1: Modrinth self-healing lookup for loaders=["fabric"]
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [
+          {
+            id: 'ver_chunky_fabric',
+            version_number: '1.4.27',
+            files: [
+              {
+                url: 'https://cdn.modrinth.com/data/fALzjamp/versions/ver_chunky_fabric/Chunky-Fabric-1.4.27.jar',
+                filename: 'Chunky-Fabric-1.4.27.jar',
+                primary: true
+              }
+            ]
+          }
+        ]
+      } as unknown as Response)
+      // Call 2: Actual file download
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: createMockStream(mockJarContent)
+      } as unknown as Response);
+
+    const request: InstallContentRequest = {
+      instanceId,
+      providerId: 'modrinth',
+      projectId: 'fALzjamp',
+      projectType: 'mod',
+      versionId: 'ver_chunky_bukkit',
+      versionNumber: '1.4.27',
+      fileName: 'Chunky-Bukkit-1.4.27.jar',
+      downloadUrl: 'https://cdn.modrinth.com/data/fALzjamp/versions/ver_chunky_bukkit/Chunky-Bukkit-1.4.27.jar'
+    };
+
+    const installed = await installer.install(request);
+
+    expect(installed.fileName).toBe('Chunky-Fabric-1.4.27.jar');
+    expect(installed.projectType).toBe('mod');
+    expect(installed.destinationFolder).toBe('mods');
+
+    const modFile = path.join(instanceDir, 'mods', 'Chunky-Fabric-1.4.27.jar');
+    const existsInMods = await fs.access(modFile).then(() => true).catch(() => false);
+    expect(existsInMods).toBe(true);
+  });
 });

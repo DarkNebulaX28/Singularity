@@ -30,11 +30,11 @@ const POPULAR_MODS = [
   { name: 'LuckPerms', type: 'Permisos', category: 'plugin' },
   { name: 'WorldEdit', type: 'Construcción', category: 'plugin' },
   { name: 'ViaVersion', type: 'Multi-versión', category: 'plugin' },
-  { name: 'EssentialsX', type: 'Comandos', category: 'plugin' },
-  { name: 'Lithium', type: 'Físicas Servidor', category: 'mod' },
-  { name: 'FerriteCore', type: 'Memoria RAM', category: 'mod' },
-  { name: 'Voice Chat', type: 'Proximidad', category: 'plugin' },
-  { name: 'Geyser', type: 'Crossplay Bedrock', category: 'plugin' }
+  { name: 'Lithium', type: 'Físicas Mod', category: 'mod' },
+  { name: 'FerriteCore', type: 'RAM Mod', category: 'mod' },
+  { name: 'Fabric API', type: 'Librería Mod', category: 'mod' },
+  { name: 'Terralith', type: 'Biomas Datapack/Mod', category: 'datapack' },
+  { name: 'Incendium', type: 'Nether Datapack/Mod', category: 'datapack' }
 ];
 
 interface CatalogExplorerProps {
@@ -75,15 +75,24 @@ export const CatalogExplorer: React.FC<CatalogExplorerProps> = ({
     }
   }, [defaultProjectType]);
 
-  // When user picks a target server, auto-switch filter to Plugins or Mods
+  // When user picks a target server, auto-switch filter to Plugins, Mods, or Datapacks
   const handleSelectTargetServer = (srvId: string) => {
     setTargetServerId(srvId);
     const srv = servers.find((s) => s.id === srvId);
     if (srv) {
-      const isPlugin = ['paper', 'purpur', 'spigot', 'bukkit'].includes(srv.loader.toLowerCase());
-      setProjectType(isPlugin ? 'plugin' : 'mod');
+      const cleanLoader = srv.loader.toLowerCase();
+      const isPlugin = ['paper', 'purpur', 'spigot', 'bukkit'].includes(cleanLoader);
+      const isVanilla = cleanLoader === 'vanilla';
+      const targetMode = isVanilla ? 'datapack' : isPlugin ? 'plugin' : 'mod';
+      setProjectType(targetMode);
       toast(
-        `Catálogo vinculado a "${srv.name}" (${isPlugin ? 'Modo Plugins /plugins' : `Modo Mods (${srv.loader.toUpperCase()})`})`,
+        `Catálogo vinculado a "${srv.name}" (${
+          isVanilla
+            ? 'Modo Datapacks /datapacks'
+            : isPlugin
+            ? 'Modo Plugins /plugins'
+            : `Modo Mods (/mods • ${srv.loader.toUpperCase()})`
+        })`,
         'info'
       );
     }
@@ -93,6 +102,13 @@ export const CatalogExplorer: React.FC<CatalogExplorerProps> = ({
   const isTargetPluginServer = Boolean(
     activeTargetServer &&
       ['paper', 'purpur', 'spigot', 'bukkit'].includes(activeTargetServer.loader.toLowerCase())
+  );
+  const isTargetModServer = Boolean(
+    activeTargetServer &&
+      ['fabric', 'neoforge', 'forge', 'quilt'].includes(activeTargetServer.loader.toLowerCase())
+  );
+  const isTargetVanillaServer = Boolean(
+    activeTargetServer && activeTargetServer.loader.toLowerCase() === 'vanilla'
   );
 
   const [items, setItems] = useState<CatalogItemData[]>([]);
@@ -125,33 +141,40 @@ export const CatalogExplorer: React.FC<CatalogExplorerProps> = ({
 
   const curseforgeStatus = providersStatus.find((p) => p.id === 'curseforge');
 
-  const performSearch = useCallback(async (searchQuery: string, type: string, prov: string) => {
-    setIsLoading(true);
-    setErrorMsg(null);
+  const performSearch = useCallback(
+    async (searchQuery: string, type: string, prov: string, targetLoader?: string) => {
+      setIsLoading(true);
+      setErrorMsg(null);
 
-    try {
-      const params = new URLSearchParams();
-      if (searchQuery.trim()) params.set('query', searchQuery.trim());
-      if (type !== 'all') params.set('projectType', type);
-      params.set('provider', prov);
+      try {
+        const params = new URLSearchParams();
+        if (searchQuery.trim()) params.set('query', searchQuery.trim());
+        if (type !== 'all') params.set('projectType', type);
+        // When filtering Mods or Plugins for a specific selected server, pass its loader so results match its engine
+        if (targetLoader && (type === 'mod' || type === 'plugin')) {
+          params.set('loader', targetLoader);
+        }
+        params.set('provider', prov);
 
-      const res = await api.get<SearchResponse>(`/catalog/search?${params.toString()}`);
-      setItems(res.items || []);
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Error al buscar en el catálogo');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+        const res = await api.get<SearchResponse>(`/catalog/search?${params.toString()}`);
+        setItems(res.items || []);
+      } catch (err: unknown) {
+        setErrorMsg(err instanceof Error ? err.message : 'Error al buscar en el catálogo');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
 
   // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
-      performSearch(query, projectType, provider);
+      performSearch(query, projectType, provider, activeTargetServer?.loader);
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [query, projectType, provider, performSearch]);
+  }, [query, projectType, provider, activeTargetServer?.loader, performSearch]);
 
   const handleSaveCurseForgeKey = async () => {
     if (!keyInput.trim()) return;
@@ -288,13 +311,17 @@ export const CatalogExplorer: React.FC<CatalogExplorerProps> = ({
           </div>
           <span
             className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-              isTargetPluginServer
+              projectType === 'datapack' || isTargetVanillaServer
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                : isTargetPluginServer
                 ? 'bg-nebula-cyber/15 text-nebula-cyber border-nebula-cyber/30'
-                : 'bg-nebula-purple/15 text-purple-300 border-purple-500/30'
+                : 'bg-blue-500/15 text-blue-300 border-blue-500/30'
             }`}
           >
-            {isTargetPluginServer
-              ? 'MODO PLUGIN ACTIVO (/plugins)'
+            {projectType === 'datapack' || isTargetVanillaServer
+              ? 'MODO DATAPACK ACTIVO (/datapacks + /world/datapacks)'
+              : isTargetPluginServer
+              ? `MODO PLUGIN ACTIVO (/plugins • ${activeTargetServer.loader.toUpperCase()})`
               : `MODO MOD ACTIVO (/mods • ${activeTargetServer.loader.toUpperCase()})`}
           </span>
         </div>
@@ -473,8 +500,14 @@ export const CatalogExplorer: React.FC<CatalogExplorerProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {visibleItems.map((item) => {
               const effectiveItem: CatalogItemData =
-                projectType === 'plugin' || isTargetPluginServer
+                item.projectType === 'modpack'
+                  ? item
+                  : projectType === 'datapack' || isTargetVanillaServer
+                  ? { ...item, projectType: 'datapack' }
+                  : projectType === 'plugin' || isTargetPluginServer
                   ? { ...item, projectType: 'plugin' }
+                  : projectType === 'mod' || isTargetModServer
+                  ? { ...item, projectType: 'mod' }
                   : item;
               return (
                 <ContentCard

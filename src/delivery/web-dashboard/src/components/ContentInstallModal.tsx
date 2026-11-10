@@ -51,6 +51,7 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
   // Deployment Mode: 'new_server' or 'existing_server'
   const isModpack = item?.projectType === 'modpack';
   const [installMode, setInstallMode] = useState<'new_server' | 'existing_server'>('existing_server');
+  const [artifactMode, setArtifactMode] = useState<'engine' | 'datapack'>('engine');
 
   // New Server Form States
   const [newServerName, setNewServerName] = useState('');
@@ -61,6 +62,16 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
   const [newServerMemoryMb, setNewServerMemoryMb] = useState(6144);
   const [newServerPort, setNewServerPort] = useState(25565);
   const [deployStep, setDeployStep] = useState<string | null>(null);
+
+  const lowerCategories = (item?.categories ?? []).map((c) => c.toLowerCase());
+  const hasDatapackSupport =
+    item?.projectType === 'datapack' || lowerCategories.includes('datapack');
+  const hasModOrPluginSupport =
+    item?.projectType === 'mod' ||
+    item?.projectType === 'plugin' ||
+    lowerCategories.some((c) =>
+      ['fabric', 'forge', 'neoforge', 'quilt', 'paper', 'spigot', 'bukkit', 'purpur', 'folia'].includes(c)
+    );
 
   // Load servers and set defaults before fetching versions
   useEffect(() => {
@@ -91,6 +102,7 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
   useEffect(() => {
     if (!item) return;
     setNewServerName(item.title);
+    setArtifactMode(item.projectType === 'datapack' ? 'datapack' : 'engine');
 
     if (defaultServerId && servers.some((s) => s.id === defaultServerId)) {
       setSelectedServerId(defaultServerId);
@@ -103,10 +115,17 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
         const preferred = pluginServers[pluginServers.length - 1] || servers[servers.length - 1];
         if (preferred) setSelectedServerId(preferred.id);
       } else if (item.projectType === 'mod') {
+        // Prefer a server whose mod loader matches the item's supported categories
         const modServers = servers.filter((s) =>
           ['fabric', 'neoforge', 'forge', 'quilt'].includes(s.loader.toLowerCase())
         );
-        const preferred = modServers[modServers.length - 1] || servers[servers.length - 1];
+        const exactMatch = modServers.filter((s) =>
+          lowerCategories.includes(s.loader.toLowerCase())
+        );
+        const preferred =
+          exactMatch[exactMatch.length - 1] ||
+          modServers[modServers.length - 1] ||
+          servers[servers.length - 1];
         if (preferred) setSelectedServerId(preferred.id);
       } else {
         const latest = servers[servers.length - 1];
@@ -120,9 +139,15 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
     } else if (item.projectType === 'plugin') {
       setInstallMode(servers.length > 0 ? 'existing_server' : 'new_server');
       setNewServerLoader('paper');
+    } else if (item.projectType === 'datapack') {
+      setInstallMode(servers.length > 0 ? 'existing_server' : 'new_server');
+      setNewServerLoader('paper');
     } else {
       setInstallMode(servers.length > 0 ? 'existing_server' : 'new_server');
-      setNewServerLoader('fabric');
+      const preferredModLoader = (['fabric', 'neoforge', 'forge'] as const).find((l) =>
+        lowerCategories.includes(l)
+      );
+      setNewServerLoader(preferredModLoader || 'fabric');
     }
   }, [item, servers, defaultServerId]);
 
@@ -132,8 +157,22 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
   const effectiveGameVersion =
     installMode === 'existing_server' ? targetServer?.gameVersion : newServerGameVersion;
 
+  const isDatapackMode =
+    !isModpack &&
+    (artifactMode === 'datapack' ||
+      item?.projectType === 'datapack' && !hasModOrPluginSupport ||
+      effectiveLoader?.toLowerCase() === 'vanilla');
+
   const isPluginServer = Boolean(
-    effectiveLoader && ['paper', 'purpur', 'spigot', 'bukkit'].includes(effectiveLoader.toLowerCase())
+    !isDatapackMode &&
+      effectiveLoader &&
+      ['paper', 'purpur', 'spigot', 'bukkit'].includes(effectiveLoader.toLowerCase())
+  );
+
+  const isModServer = Boolean(
+    !isDatapackMode &&
+      effectiveLoader &&
+      ['fabric', 'neoforge', 'forge', 'quilt'].includes(effectiveLoader.toLowerCase())
   );
 
   // Fetch real available versions from backend filtered strictly by target loader & gameVersion
@@ -148,14 +187,16 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
     setErrorMsg(null);
 
     const queryParams = new URLSearchParams();
+    const resolvedLoaderQuery = isDatapackMode ? 'datapack' : effectiveLoader;
+
     if (installMode === 'existing_server' && targetServer) {
       queryParams.set('gameVersion', targetServer.gameVersion);
-      queryParams.set('loader', targetServer.loader);
+      if (resolvedLoaderQuery) queryParams.set('loader', resolvedLoaderQuery);
     } else if (installMode === 'new_server' && !isModpack) {
       if (newServerGameVersion.trim()) {
         queryParams.set('gameVersion', newServerGameVersion.trim());
       }
-      queryParams.set('loader', newServerLoader);
+      if (resolvedLoaderQuery) queryParams.set('loader', resolvedLoaderQuery);
     }
 
     api
@@ -196,7 +237,9 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
     targetServer?.loader,
     newServerLoader,
     newServerGameVersion,
-    isModpack
+    isModpack,
+    isDatapackMode,
+    effectiveLoader
   ]);
 
   const selectedVersion = versions.find((v) => v.id === selectedVersionId) || versions[0];
@@ -230,20 +273,28 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
   // Client-only mod check
   const isClientMod =
     !isPluginServer &&
+    !isDatapackMode &&
     (item.projectType === 'mod' || !item.projectType) &&
     (isClientOnlyMod(item.slug) ||
       isClientOnlyMod(item.title) ||
       (selectedVersion ? isClientOnlyMod(selectedVersion.fileName) : false));
 
   // Determine smart target subfolder
-  const targetSubfolder =
-    isPluginServer || item.projectType === 'plugin'
-      ? 'plugins'
-      : item.projectType === 'datapack'
-      ? 'datapacks'
-      : item.projectType === 'modpack'
-      ? ''
-      : 'mods';
+  const targetSubfolder = isModpack
+    ? ''
+    : isDatapackMode
+    ? 'datapacks'
+    : isPluginServer || item.projectType === 'plugin'
+    ? 'plugins'
+    : 'mods';
+
+  const resolvedInstallType: 'modpack' | 'datapack' | 'plugin' | 'mod' = isModpack
+    ? 'modpack'
+    : isDatapackMode
+    ? 'datapack'
+    : isPluginServer
+    ? 'plugin'
+    : 'mod';
 
   const handleInstall = async () => {
     if (!selectedVersion) return;
@@ -262,23 +313,19 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
           port: newServerPort
         });
 
-        const resolvedType = isModpack
-          ? 'modpack'
-          : ['paper', 'purpur', 'spigot'].includes(newServerLoader)
-          ? 'plugin'
-          : item.projectType;
-
         setDeployStep(
-          resolvedType === 'modpack'
+          resolvedInstallType === 'modpack'
             ? 'Descargando y extrayendo modpack (omitiendo mods de cliente)...'
-            : `Instalando ${resolvedType === 'plugin' ? 'plugin en /plugins' : 'mod en /mods'}...`
+            : resolvedInstallType === 'datapack'
+            ? 'Instalando datapack en /datapacks y sincronizando mundo...'
+            : `Instalando ${resolvedInstallType === 'plugin' ? 'plugin en /plugins' : `mod (${newServerLoader.toUpperCase()}) en /mods`}...`
         );
 
         await api.post('/catalog/install', {
           instanceId: newServer.id,
           providerId: item.providerId,
           projectId: item.id,
-          projectType: resolvedType,
+          projectType: resolvedInstallType,
           versionId: selectedVersion.id,
           versionNumber: selectedVersion.versionNumber,
           fileName: selectedVersion.fileName,
@@ -297,7 +344,7 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
           instanceId: selectedServerId,
           providerId: item.providerId,
           projectId: item.id,
-          projectType: isPluginServer ? 'plugin' : item.projectType,
+          projectType: resolvedInstallType,
           versionId: selectedVersion.id,
           versionNumber: selectedVersion.versionNumber,
           fileName: selectedVersion.fileName,
@@ -328,15 +375,29 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
         <div className="flex items-start justify-between gap-3 mb-4 pb-3 border-b border-nebula-800">
           <div>
             <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-              <span>{isModpack ? 'Desplegar Modpack' : `Instalar ${isPluginServer ? 'Plugin' : 'Contenido'}`}</span>
+              <span>
+                {isModpack
+                  ? 'Desplegar Modpack'
+                  : isDatapackMode
+                  ? 'Instalar Datapack'
+                  : isPluginServer
+                  ? 'Instalar Plugin'
+                  : 'Instalar Mod'}
+              </span>
               <span
                 className={`text-[10px] font-mono px-2 py-0.5 rounded border uppercase ${
-                  isPluginServer
+                  isDatapackMode
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                    : isPluginServer
                     ? 'bg-nebula-cyber/15 text-nebula-cyber border-nebula-cyber/30'
-                    : 'bg-nebula-purple/15 text-purple-300 border-purple-500/30'
+                    : 'bg-blue-500/15 text-blue-300 border-blue-500/30'
                 }`}
               >
-                {isPluginServer ? 'Modo Plugin (Paper/Bukkit)' : `Modo ${effectiveLoader?.toUpperCase() || 'Mod'}`}
+                {isDatapackMode
+                  ? 'Modo Datapack (.zip)'
+                  : isPluginServer
+                  ? `Modo Plugin (${effectiveLoader?.toUpperCase()})`
+                  : `Modo Mod (${effectiveLoader?.toUpperCase() || 'MOD'})`}
               </span>
             </h3>
             <span className="text-[11px] font-mono text-slate-400">
@@ -350,6 +411,37 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Hybrid Artifact Mode Toggle (when project supports BOTH Mod/Plugin AND Datapack, e.g. Terralith, Incendium) */}
+        {!isModpack && hasDatapackSupport && hasModOrPluginSupport && effectiveLoader?.toLowerCase() !== 'vanilla' && (
+          <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-nebula-950 border border-nebula-800 mb-3 text-[11px] font-mono">
+            <span className="text-slate-400 pl-1">Formato del proyecto híbrido:</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setArtifactMode('engine')}
+                className={`px-2.5 py-1 rounded-lg transition-all ${
+                  artifactMode === 'engine'
+                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {isPluginServer ? '🔌 Plugin (.jar)' : `⚙️ Mod ${effectiveLoader?.toUpperCase() || ''} (.jar)`}
+              </button>
+              <button
+                type="button"
+                onClick={() => setArtifactMode('datapack')}
+                className={`px-2.5 py-1 rounded-lg transition-all ${
+                  artifactMode === 'datapack'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                🗺️ Datapack (.zip)
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Install Mode Switcher Tabs */}
         <div className="flex p-1 rounded-xl bg-nebula-950 border border-nebula-800 mb-4 text-xs font-mono">
@@ -534,16 +626,18 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
           <div>
             <label className="block text-xs font-semibold text-slate-200 mb-1.5 flex items-center justify-between">
               <span>2. Archivo Compatible ({versions.length})</span>
-              {effectiveLoader && (
+              {(isDatapackMode || effectiveLoader) && (
                 <span className="text-[10px] font-mono text-nebula-cyber">
-                  Filtrado para {effectiveLoader.toUpperCase()} ({effectiveGameVersion})
+                  Filtrado para {isDatapackMode ? 'DATAPACK (.ZIP)' : effectiveLoader?.toUpperCase()} ({effectiveGameVersion})
                 </span>
               )}
             </label>
             {isLoadingVersions || isLoadingServers ? (
               <div className="flex items-center gap-2 p-2.5 rounded-lg bg-nebula-950 border border-nebula-800 text-xs text-slate-400 font-mono">
                 <Orbit className="w-4 h-4 animate-spin text-nebula-accent" />
-                <span>Filtrando archivos para {effectiveLoader?.toUpperCase() || 'servidor'}...</span>
+                <span>
+                  Filtrando archivos para {isDatapackMode ? 'DATAPACK (.ZIP)' : effectiveLoader?.toUpperCase() || 'servidor'}...
+                </span>
               </div>
             ) : versions.length === 0 ? (
               <div className="p-2.5 rounded-lg bg-nebula-950 border border-nebula-800 text-xs text-slate-500 font-mono">
@@ -586,6 +680,16 @@ export const ContentInstallModal: React.FC<ContentInstallModalProps> = ({
             {isPluginServer && (
               <p className="text-[10px] text-emerald-400/90 font-sans leading-tight">
                 ✓ Motor de Plugins detectado ({effectiveLoader?.toUpperCase()}): se descargará la edición de Plugin (Bukkit/Paper/Spigot) en <code>/plugins</code>.
+              </p>
+            )}
+            {isModServer && (
+              <p className="text-[10px] text-blue-300/90 font-sans leading-tight">
+                ✓ Motor de Mods detectado ({effectiveLoader?.toUpperCase()}): se descargará la edición nativa para {effectiveLoader?.toUpperCase()} en <code>/mods</code>.
+              </p>
+            )}
+            {isDatapackMode && (
+              <p className="text-[10px] text-amber-300/90 font-sans leading-tight">
+                ✓ Modo Datapack activo: se instalará el archivo <code>.zip</code> en <code>/datapacks</code> y se sincronizará automáticamente con <code>/world/datapacks</code>.
               </p>
             )}
           </div>

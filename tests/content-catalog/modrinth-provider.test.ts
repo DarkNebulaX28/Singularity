@@ -188,4 +188,70 @@ describe('ModrinthProvider', () => {
     expect(fallbackCallUrl).toContain('bukkit');
     expect(fallbackCallUrl).not.toContain('game_versions=');
   });
+
+  it('should resolve hybrid mod+datapack projects like Terralith as datapack and fetch .zip builds when loader is datapack', async () => {
+    const mockSearchResponse = {
+      hits: [
+        {
+          project_id: '8oi3bsk5',
+          slug: 'terralith',
+          title: 'Terralith',
+          description: 'Overworld worldgen overhaul available as datapack and mod',
+          categories: ['datapack', 'fabric', 'forge', 'neoforge', 'quilt', 'worldgen'],
+          client_side: 'optional',
+          server_side: 'required',
+          project_type: 'mod',
+          downloads: 25000000,
+          icon_url: 'https://cdn.modrinth.com/data/8oi3bsk5/icon.png',
+          author: 'Starmute'
+        }
+      ],
+      total_hits: 1
+    };
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockSearchResponse
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 'ver_terralith_dp',
+            project_id: '8oi3bsk5',
+            name: 'Terralith v2.5.8 (Datapack)',
+            version_number: '2.5.8',
+            game_versions: ['1.21.4'],
+            loaders: ['datapack'],
+            files: [
+              {
+                url: 'https://cdn.modrinth.com/data/8oi3bsk5/versions/ver_terralith_dp/Terralith_1.21_v2.5.8.zip',
+                filename: 'Terralith_1.21_v2.5.8.zip',
+                primary: true,
+                size: 3200000
+              }
+            ],
+            dependencies: []
+          }
+        ]
+      } as Response);
+
+    globalThis.fetch = fetchMock;
+
+    const searchResult = await provider.search({
+      query: 'terralith',
+      projectType: 'datapack'
+    });
+
+    expect(searchResult.items.length).toBe(1);
+    expect(searchResult.items[0]?.slug).toBe('terralith');
+    expect(searchResult.items[0]?.projectType).toBe('datapack');
+
+    const versions = await provider.getVersions('8oi3bsk5', '1.21.4', 'datapack');
+    expect(versions.length).toBe(1);
+    expect(versions[0]?.fileName).toBe('Terralith_1.21_v2.5.8.zip');
+    expect(versions[0]?.loaders).toContain('datapack');
+  });
 });
