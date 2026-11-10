@@ -118,4 +118,30 @@ describe('FileManager Domain > FileManagerService', () => {
     const mods = await service.listFiles(instanceId, 'mods');
     expect(mods.some((m) => m.name === 'TestMod.jar')).toBe(true);
   });
+
+  it('should copy files and directories, compress to ZIP, and extract ZIP safely', async () => {
+    await service.copyFileOrDirectory(instanceId, 'config.yml', 'config_copy.yml');
+    const copied = await service.readFileContent(instanceId, 'config_copy.yml');
+    expect(copied.content).toContain('server-name: Test SMP');
+
+    const zipRes = await service.compressToZip(
+      instanceId,
+      ['config.yml', 'plugins/MyPlugin'],
+      'pack_test.zip'
+    );
+    expect(zipRes.zipPath).toBe('pack_test.zip');
+    expect(zipRes.sizeBytes).toBeGreaterThan(0);
+
+    const extracted = await service.extractZip(instanceId, 'pack_test.zip', 'extracted_folder');
+    expect(extracted.extractedCount).toBeGreaterThanOrEqual(2);
+
+    const extractedConfig = await service.readFileContent(instanceId, 'extracted_folder/config.yml');
+    expect(extractedConfig.content).toContain('server-name: Test SMP');
+  });
+
+  it('should export editable workspace bundle for live IDE sync', async () => {
+    const bundle = await service.exportEditableWorkspace(instanceId);
+    expect(bundle.some((f) => f.relativePath === 'config.yml')).toBe(true);
+    expect(bundle.some((f) => f.relativePath === 'plugins/MyPlugin/plugin.yml')).toBe(true);
+  });
 });

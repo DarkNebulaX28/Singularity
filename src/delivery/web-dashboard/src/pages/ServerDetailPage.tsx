@@ -117,17 +117,34 @@ export const ServerDetailPage: React.FC<ServerDetailPageProps> = ({
     try {
       if (desktopApi?.openInIde) {
         try {
-          const res = await desktopApi.openInIde(server.id, ideToUse);
+          setIdeFeedbackMsg('Sincronizando IDE...');
+          let syncFiles: Array<{ relativePath: string; content: string }> | undefined;
+          try {
+            const bundle = await api.get<{ files: Array<{ relativePath: string; content: string }> }>(
+              `/servers/${server.id}/files/workspace-bundle`
+            );
+            syncFiles = bundle.files;
+          } catch {
+            // Ignore bundle error if offline or local
+          }
+
+          const res = await desktopApi.openInIde(server.id, ideToUse, {
+            syncFiles,
+            remoteApiUrl: window.location.origin,
+            authToken: localStorage.getItem('singularity_token') || undefined
+          });
           if (res.success) {
             localStorage.setItem('singularity_preferred_ide', ideToUse);
             setIdeFeedbackMsg(`Abierto en ${res.ideUsed}`);
-            setTimeout(() => setIdeFeedbackMsg(null), 3000);
+            setTimeout(() => setIdeFeedbackMsg(null), 3500);
             return;
           } else {
+            setIdeFeedbackMsg(null);
             setActionErrorMsg(res.error || 'No se pudo abrir el editor seleccionado.');
             return;
           }
         } catch {
+          setIdeFeedbackMsg(null);
           // Fall through to REST API if desktop IPC has issues
         }
       }

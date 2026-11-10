@@ -15,10 +15,15 @@ export interface RemoteWorkspaceOptions {
   sftpPort?: number;
   username?: string;
   serverName?: string;
+  filePath?: string;
+  syncFiles?: Array<{ relativePath: string; content: string }>;
+  remoteApiUrl?: string;
+  authToken?: string;
 }
 
 export class IdeBridge {
   private readonly defaultServersDir: string;
+  private readonly activeWatchers = new Map<string, fs.FSWatcher>();
 
   constructor(serversDir?: string) {
     this.defaultServersDir = path.resolve(serversDir || process.env['SINGULARITY_SERVERS_DIR'] || 'data/servers');
@@ -200,13 +205,114 @@ Este servidor de Minecraft está alojado y corriendo en tu VPS en la nube:
   }
 
   /**
+   * Mirrors remote server configuration files locally and starts a live 2-way watcher
+   * so saving (Ctrl+S) in native Antigravity IDE / VS Code / Cursor automatically uploads
+   * the modified file to the remote server.
+   */
+  syncRemoteFilesToWorkspace(
+    targetDir: string,
+    serverId: string,
+    options?: RemoteWorkspaceOptions
+  ): void {
+    if (Array.isArray(options?.syncFiles) && options.syncFiles.length > 0) {
+      for (const item of options.syncFiles) {
+        if (!item?.relativePath || item.relativePath.includes('\0')) continue;
+        const cleanRel = item.relativePath.replace(/^(\/|\\)+/, '');
+        const fullFilePath = path.resolve(targetDir, cleanRel);
+        if (!fullFilePath.startsWith(targetDir + path.sep)) continue;
+
+        try {
+          fs.mkdirSync(path.dirname(fullFilePath), { recursive: true });
+          fs.writeFileSync(fullFilePath, item.content ?? '', 'utf8');
+        } catch {
+          // Ignore individual file write errors
+        }
+      }
+    }
+
+    if (options?.remoteApiUrl && options?.authToken && serverId) {
+      this.startRemoteLiveSyncWatcher(targetDir, serverId, options.remoteApiUrl, options.authToken);
+    }
+  }
+
+  private startRemoteLiveSyncWatcher(
+    targetDir: string,
+    serverId: string,
+    remoteApiUrl: string,
+    authToken: string
+  ): void {
+    const existing = this.activeWatchers.get(serverId);
+    if (existing) {
+      try {
+        existing.close();
+      } catch {
+        // Ignore close error
+      }
+      this.activeWatchers.delete(serverId);
+    }
+
+    const debounceTimers = new Map<string, NodeJS.Timeout>();
+    const baseApi = remoteApiUrl.replace(/\/+$/, '');
+
+    try {
+      const watcher = fs.watch(targetDir, { recursive: true }, (_eventType, filename) => {
+        if (!filename) return;
+        const normalizedRel = filename.replace(/\\/g, '/');
+        if (
+          normalizedRel.startsWith('.vscode/') ||
+          normalizedRel.startsWith('.git/') ||
+          normalizedRel === 'REMOTE_SERVER_INFO.md' ||
+          normalizedRel.endsWith('~') ||
+          normalizedRel.endsWith('.tmp')
+        ) {
+          return;
+        }
+
+        const prevTimer = debounceTimers.get(normalizedRel);
+        if (prevTimer) clearTimeout(prevTimer);
+
+        const timer = setTimeout(async () => {
+          debounceTimers.delete(normalizedRel);
+          const fullPath = path.resolve(targetDir, filename);
+          if (!fullPath.startsWith(targetDir + path.sep) || !fs.existsSync(fullPath)) return;
+
+          try {
+            const stat = fs.statSync(fullPath);
+            if (!stat.isFile() || stat.size > 2 * 1024 * 1024) return;
+            const content = fs.readFileSync(fullPath, 'utf8');
+            await fetch(`${baseApi}/api/servers/${encodeURIComponent(serverId)}/files/content`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${authToken}`
+              },
+              body: JSON.stringify({
+                path: normalizedRel,
+                content
+              })
+            });
+          } catch {
+            // Ignore background sync network errors
+          }
+        }, 350);
+
+        debounceTimers.set(normalizedRel, timer);
+      });
+
+      this.activeWatchers.set(serverId, watcher);
+    } catch {
+      // recursive fs.watch may not be supported on some older Linux kernels; ignore gracefully
+    }
+  }
+
+  /**
    * Opens the Minecraft server directory in the chosen or best-available IDE.
    */
   async openInIde(
     serverIdOrPath: string,
     preferredIde: 'antigravity' | 'vscode' | 'cursor' | 'explorer' = 'antigravity',
     options?: RemoteWorkspaceOptions
-  ): Promise<{ success: boolean; ideUsed: string; isRemote?: boolean; error?: string }> {
+  ): Promise<{ success: boolean; ideUsed: string; isRemote?: boolean; syncedFiles?: number; error?: string }> {
     const targetDir = this.resolveInstancePath(serverIdOrPath);
 
     if (!fs.existsSync(targetDir)) {
@@ -220,12 +326,25 @@ Este servidor de Minecraft está alojado y corriendo en tu VPS en la nube:
     const isRemote = Boolean(options?.isRemote || !hasLocalServerMetadata);
     if (isRemote) {
       this.provisionRemoteWorkspace(targetDir, path.basename(serverIdOrPath), options);
+      this.syncRemoteFilesToWorkspace(targetDir, path.basename(serverIdOrPath), options);
     }
+
+    // Resolve optional specific file inside targetDir
+    const ideArgs: string[] = [targetDir];
+    if (options?.filePath && !options.filePath.includes('\0') && !/[&|;`$<>"]/g.test(options.filePath)) {
+      const cleanRelFile = options.filePath.trim().replace(/^(\/|\\)+/, '');
+      const fullTargetFile = path.resolve(targetDir, cleanRelFile);
+      if (fullTargetFile.startsWith(targetDir + path.sep) && fs.existsSync(fullTargetFile)) {
+        ideArgs.push(fullTargetFile);
+      }
+    }
+
+    const syncedFiles = options?.syncFiles?.length;
 
     // Direct Explorer Request
     if (preferredIde === 'explorer') {
       const res = await this.openFolderInExplorer(targetDir);
-      return { ...res, isRemote };
+      return { ...res, isRemote, syncedFiles };
     }
 
     const ides = await this.getAvailableIdes();
@@ -235,39 +354,39 @@ Este servidor de Minecraft está alojado y corriendo en tu VPS en la nube:
 
     // 1. Explicit preference match
     if (preferredIde === 'antigravity' && antigravity?.isAvailable) {
-      const opened = await this.spawnIdeProcess(antigravity.command, [targetDir]);
-      if (opened) return { success: true, ideUsed: 'Antigravity IDE', isRemote };
+      const opened = await this.spawnIdeProcess(antigravity.command, ideArgs);
+      if (opened) return { success: true, ideUsed: 'Antigravity IDE', isRemote, syncedFiles };
     }
 
     if (preferredIde === 'vscode' && vscode?.isAvailable) {
-      const opened = await this.spawnIdeProcess(vscode.command, [targetDir]);
-      if (opened) return { success: true, ideUsed: 'Visual Studio Code', isRemote };
+      const opened = await this.spawnIdeProcess(vscode.command, ideArgs);
+      if (opened) return { success: true, ideUsed: 'Visual Studio Code', isRemote, syncedFiles };
     }
 
     if (preferredIde === 'cursor' && cursor?.isAvailable) {
-      const opened = await this.spawnIdeProcess(cursor.command, [targetDir]);
-      if (opened) return { success: true, ideUsed: 'Cursor', isRemote };
+      const opened = await this.spawnIdeProcess(cursor.command, ideArgs);
+      if (opened) return { success: true, ideUsed: 'Cursor', isRemote, syncedFiles };
     }
 
     // 2. Fallback to any detected code editor
     if (antigravity?.isAvailable) {
-      const opened = await this.spawnIdeProcess(antigravity.command, [targetDir]);
-      if (opened) return { success: true, ideUsed: 'Antigravity IDE', isRemote };
+      const opened = await this.spawnIdeProcess(antigravity.command, ideArgs);
+      if (opened) return { success: true, ideUsed: 'Antigravity IDE', isRemote, syncedFiles };
     }
 
     if (vscode?.isAvailable) {
-      const opened = await this.spawnIdeProcess(vscode.command, [targetDir]);
-      if (opened) return { success: true, ideUsed: 'Visual Studio Code', isRemote };
+      const opened = await this.spawnIdeProcess(vscode.command, ideArgs);
+      if (opened) return { success: true, ideUsed: 'Visual Studio Code', isRemote, syncedFiles };
     }
 
     if (cursor?.isAvailable) {
-      const opened = await this.spawnIdeProcess(cursor.command, [targetDir]);
-      if (opened) return { success: true, ideUsed: 'Cursor', isRemote };
+      const opened = await this.spawnIdeProcess(cursor.command, ideArgs);
+      if (opened) return { success: true, ideUsed: 'Cursor', isRemote, syncedFiles };
     }
 
     // 3. Fallback: OS Native Explorer/Finder
     const fallbackRes = await this.openFolderInExplorer(targetDir);
-    return { ...fallbackRes, isRemote };
+    return { ...fallbackRes, isRemote, syncedFiles };
   }
 
   async openFolderInExplorer(targetDir: string): Promise<{ success: boolean; ideUsed: string; error?: string }> {

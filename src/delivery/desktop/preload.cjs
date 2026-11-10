@@ -2,7 +2,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const desktopApi = {
   isElectron: true,
-  openInIde: (serverId, ide) => ipcRenderer.invoke('singularity:open-ide', { serverId, ide }),
+  openInIde: (serverId, ide, extraOptions) =>
+    ipcRenderer.invoke('singularity:open-ide', {
+      serverId,
+      ide,
+      ...(extraOptions && typeof extraOptions === 'object' ? extraOptions : {})
+    }),
   openFolder: (targetPath) => ipcRenderer.invoke('singularity:open-folder', { targetPath }),
   getAvailableIdes: () => ipcRenderer.invoke('singularity:get-ides'),
   getSftpConnectionInfo: () => ipcRenderer.invoke('singularity:get-sftp-info'),

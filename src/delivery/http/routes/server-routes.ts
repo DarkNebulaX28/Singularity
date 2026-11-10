@@ -323,7 +323,7 @@ export const serverRoutes: FastifyPluginAsync<ServerRoutesOptions> = async (fast
   // Open server instance directory in host IDE (ADMIN, OPERATOR)
   fastify.post<{
     Params: { id: string };
-    Body?: { ide?: 'antigravity' | 'vscode' | 'cursor' | 'explorer' };
+    Body?: { ide?: 'antigravity' | 'vscode' | 'cursor' | 'explorer'; filePath?: string };
   }>('/:id/open-ide', { preHandler: [requireRole(['ADMIN', 'OPERATOR'])] }, async (request, reply) => {
     const instance = await serverLifecycle.getInstance(request.params.id);
     if (!instance) {
@@ -339,7 +339,8 @@ export const serverRoutes: FastifyPluginAsync<ServerRoutesOptions> = async (fast
         sftpHost,
         sftpPort,
         username: 'admin',
-        serverName: instance.name
+        serverName: instance.name,
+        filePath: request.body?.filePath
       });
       return reply.status(200).send(result);
     } catch (err: unknown) {
@@ -739,6 +740,79 @@ export const serverRoutes: FastifyPluginAsync<ServerRoutesOptions> = async (fast
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al subir archivo(s)';
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  // Copy / duplicate file or directory (OPERATOR, ADMIN)
+  fastify.post<{
+    Params: { id: string };
+    Body: { sourcePath: string; destinationPath: string };
+  }>('/:id/files/copy', { preHandler: [requireRole(['ADMIN', 'OPERATOR'])] }, async (request, reply) => {
+    const { sourcePath, destinationPath } = request.body || {};
+    if (!sourcePath || !destinationPath) {
+      return reply.status(400).send({ error: 'sourcePath y destinationPath son requeridos' });
+    }
+    try {
+      await fileManagerService.copyFileOrDirectory(request.params.id, sourcePath, destinationPath);
+      return reply.status(201).send({ message: 'Elemento duplicado exitosamente' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al copiar elemento';
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  // Compress files/folders into a .zip archive (OPERATOR, ADMIN)
+  fastify.post<{
+    Params: { id: string };
+    Body: { paths: string[]; outputZipPath: string };
+  }>('/:id/files/compress', { preHandler: [requireRole(['ADMIN', 'OPERATOR'])] }, async (request, reply) => {
+    const { paths, outputZipPath } = request.body || {};
+    if (!Array.isArray(paths) || paths.length === 0 || !outputZipPath) {
+      return reply.status(400).send({ error: 'paths y outputZipPath son requeridos' });
+    }
+    try {
+      const res = await fileManagerService.compressToZip(request.params.id, paths, outputZipPath);
+      return reply.status(201).send({
+        message: `Archivo ZIP creado exitosamente (${res.zipPath})`,
+        ...res
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al comprimir en ZIP';
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  // Extract a .zip archive inside server directory (OPERATOR, ADMIN)
+  fastify.post<{
+    Params: { id: string };
+    Body: { zipPath: string; targetDir?: string };
+  }>('/:id/files/extract', { preHandler: [requireRole(['ADMIN', 'OPERATOR'])] }, async (request, reply) => {
+    const { zipPath, targetDir } = request.body || {};
+    if (!zipPath) {
+      return reply.status(400).send({ error: 'zipPath es requerido' });
+    }
+    try {
+      const res = await fileManagerService.extractZip(request.params.id, zipPath, targetDir || '');
+      return reply.status(200).send({
+        message: `Se extrajeron ${res.extractedCount} archivo(s) exitosamente`,
+        ...res
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al extraer archivo ZIP';
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  // Export editable workspace bundle for live Desktop IDE sync (Antigravity IDE / VS Code / Cursor)
+  fastify.get<{
+    Params: { id: string };
+  }>('/:id/files/workspace-bundle', async (request, reply) => {
+    try {
+      const files = await fileManagerService.exportEditableWorkspace(request.params.id);
+      return reply.status(200).send({ files });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al exportar workspace';
       return reply.status(400).send({ error: message });
     }
   });

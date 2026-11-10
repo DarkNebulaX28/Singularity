@@ -244,26 +244,55 @@ function createMainWindow(startHidden: boolean = false): BrowserWindow {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle('singularity:open-ide', async (_event, args: { serverId?: string; ide?: string } | string, maybeIde?: string) => {
-    let serverId = '';
-    let ide = 'antigravity';
-    if (typeof args === 'string') {
-      serverId = args;
-      ide = maybeIde || 'antigravity';
-    } else if (args && typeof args === 'object') {
-      serverId = args.serverId || '';
-      ide = args.ide || 'antigravity';
+  ipcMain.handle(
+    'singularity:open-ide',
+    async (
+      _event,
+      args:
+        | {
+            serverId?: string;
+            ide?: string;
+            filePath?: string;
+            syncFiles?: Array<{ relativePath: string; content: string }>;
+            remoteApiUrl?: string;
+            authToken?: string;
+          }
+        | string,
+      maybeIde?: string
+    ) => {
+      let serverId = '';
+      let ide = 'antigravity';
+      let filePath: string | undefined;
+      let syncFiles: Array<{ relativePath: string; content: string }> | undefined;
+      let remoteApiUrl: string | undefined;
+      let authToken: string | undefined;
+
+      if (typeof args === 'string') {
+        serverId = args;
+        ide = maybeIde || 'antigravity';
+      } else if (args && typeof args === 'object') {
+        serverId = args.serverId || '';
+        ide = args.ide || 'antigravity';
+        filePath = args.filePath;
+        syncFiles = args.syncFiles;
+        remoteApiUrl = args.remoteApiUrl;
+        authToken = args.authToken;
+      }
+      const pref = (ide || 'antigravity') as 'antigravity' | 'vscode' | 'cursor' | 'explorer';
+      const active = connectionManager.getActiveProfile();
+      return ideBridge.openInIde(serverId, pref, {
+        isRemote: active?.type === 'remote',
+        sftpHost: active?.sftpHost || '157.137.223.54',
+        sftpPort: active?.sftpPort || SFTP_PORT,
+        username: 'admin',
+        serverName: serverId,
+        filePath,
+        syncFiles,
+        remoteApiUrl: remoteApiUrl || active?.url,
+        authToken
+      });
     }
-    const pref = (ide || 'antigravity') as 'antigravity' | 'vscode' | 'cursor' | 'explorer';
-    const active = connectionManager.getActiveProfile();
-    return ideBridge.openInIde(serverId, pref, {
-      isRemote: active?.type === 'remote',
-      sftpHost: active?.sftpHost || '157.137.223.54',
-      sftpPort: active?.sftpPort || SFTP_PORT,
-      username: 'admin',
-      serverName: serverId
-    });
-  });
+  );
 
   ipcMain.handle('singularity:open-folder', async (_event, args: { targetPath?: string } | string) => {
     try {
