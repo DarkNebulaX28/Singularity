@@ -13,6 +13,7 @@ import {
   Layers
 } from 'lucide-react';
 import { api } from '../services/api-client.js';
+import { useDialog } from '../context/DialogContext.js';
 import type { ServerInstanceData } from '../components/ServerCard.js';
 
 interface CreateServerWizardProps {
@@ -162,6 +163,7 @@ export const CreateServerWizard: React.FC<CreateServerWizardProps> = ({
   onClose,
   onSuccess
 }) => {
+  const { toast } = useDialog();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isCreating, setIsCreating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -304,10 +306,13 @@ export const CreateServerWizard: React.FC<CreateServerWizardProps> = ({
         motd
       });
 
+      toast(`Instancia "${created.name}" desplegada exitosamente`, 'success');
       onSuccess(created);
       onClose();
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Error al crear servidor');
+      const msg = err instanceof Error ? err.message : 'Error al crear servidor';
+      setErrorMsg(msg);
+      toast(msg, 'error');
     } finally {
       setIsCreating(false);
     }
@@ -364,6 +369,63 @@ export const CreateServerWizard: React.FC<CreateServerWizardProps> = ({
           {/* STEP 1: Name and Complete Loader Ecosystem */}
           {step === 1 && (
             <div className="space-y-4">
+              {/* 1-Click Tactical Blueprints */}
+              <div className="p-3 rounded-xl bg-nebula-950 border border-nebula-850 space-y-2">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block font-semibold">
+                  PLANTILLAS DE MISIÓN RÁPIDA (1-CLIC):
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    {
+                      label: '⚡ Paper SMP',
+                      loader: 'paper' as WizardLoader,
+                      ver: '1.21.4',
+                      ram: 6144,
+                      name: 'Survival Paper SMP'
+                    },
+                    {
+                      label: '🧪 Fabric Tech',
+                      loader: 'fabric' as WizardLoader,
+                      ver: '1.21.4',
+                      ram: 6144,
+                      name: 'Fabric Tech Server'
+                    },
+                    {
+                      label: '🔥 NeoForge Mods',
+                      loader: 'neoforge' as WizardLoader,
+                      ver: '1.21.1',
+                      ram: 8192,
+                      name: 'NeoForge Modpack'
+                    },
+                    {
+                      label: '🏛️ Vanilla 26.3',
+                      loader: 'vanilla' as WizardLoader,
+                      ver: '26.3',
+                      ram: 4096,
+                      name: 'Vanilla Oficial 26.3'
+                    }
+                  ].map((bp) => (
+                    <button
+                      key={bp.label}
+                      type="button"
+                      onClick={() => {
+                        setName(bp.name);
+                        setLoader(bp.loader);
+                        setGameVersion(bp.ver);
+                        setMemoryMb(bp.ram);
+                        toast(`Plantilla "${bp.label}" aplicada (${bp.ver} • ${bp.ram / 1024}GB RAM)`, 'info');
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg bg-nebula-900 hover:bg-nebula-800 border border-nebula-800 hover:border-nebula-accent/50 text-left transition-all"
+                    >
+                      <span className="block text-xs font-mono font-bold text-slate-200">{bp.label}</span>
+                      <span className="block text-[10px] font-mono text-slate-500">
+                        MC {bp.ver} &bull; {bp.ram / 1024}GB
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-200 mb-1.5">
                   Nombre de la Instancia

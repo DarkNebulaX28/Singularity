@@ -251,6 +251,38 @@ const PROPERTY_DEFINITIONS: PropertyDefinition[] = [
     description: 'Garantiza mayor integridad ante apagones bruscos a costa de rendimiento.',
     type: 'boolean',
     category: 'advanced'
+  },
+  {
+    key: 'max-tick-time',
+    label: 'Tiempo Máximo de Tick (Watchdog ms)',
+    description: 'Milisegundos máximos de un tick antes de forzar parada (-1 para desactivar en modpacks pesados).',
+    type: 'number',
+    category: 'advanced'
+  },
+  {
+    key: 'entity-broadcast-range-percentage',
+    label: 'Rango de Entidades (%)',
+    description: 'Porcentaje de distancia a la que se renderizan entidades a los jugadores (100% por defecto).',
+    type: 'number',
+    min: 10,
+    max: 500,
+    category: 'network'
+  },
+  {
+    key: 'player-idle-timeout',
+    label: 'Expulsión por Inactividad AFK (Minutos)',
+    description: 'Minutos antes de expulsar jugadores inactivos (0 para desactivar).',
+    type: 'number',
+    min: 0,
+    max: 1440,
+    category: 'gameplay'
+  },
+  {
+    key: 'enforce-secure-profile',
+    label: 'Forzar Perfil Criptográfico Mojang',
+    description: 'Requiere firmas públicas de chat de Mojang (desactivar si usas plugins de chat custom o Geyser).',
+    type: 'boolean',
+    category: 'network'
   }
 ];
 

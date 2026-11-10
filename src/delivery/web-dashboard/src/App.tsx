@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const { user, token, isLoading, login, updatePassword, logout } = useAuth();
+  const { user, token, isLoading, login, logout } = useAuth();
 
   // Navigation State
   const [currentTab, setCurrentTab] = useState<NavTab>('servers');
@@ -31,8 +31,8 @@ export const App: React.FC = () => {
   // Modals
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isSftpModalOpen, setIsSftpModalOpen] = useState(false);
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileModalTab, setProfileModalTab] = useState<'profile' | 'security'>('profile');
   const [isConnectionModalOpen, setIsConnectionModalOpen] = useState(false);
   const [isCreateWizardOpen, setIsCreateWizardOpen] = useState(false);
 
@@ -49,15 +49,13 @@ export const App: React.FC = () => {
     }).catch(() => {});
   }, [token, user, currentTab, isCreateWizardOpen]);
 
-  // Password Change Form State
-  const [currentPass, setCurrentPass] = useState('');
-  const [newPass, setNewPass] = useState('');
-  const [confirmPass, setConfirmPass] = useState('');
-  const [passError, setPassError] = useState<string | null>(null);
-  const [passSuccess, setPassSuccess] = useState(false);
-
   // Copy feedback
   const [copiedSftp, setCopiedSftp] = useState(false);
+
+  const openProfileModal = (tab: 'profile' | 'security' = 'profile') => {
+    setProfileModalTab(tab);
+    setIsProfileModalOpen(true);
+  };
 
   if (isLoading) {
     return (
@@ -88,7 +86,7 @@ export const App: React.FC = () => {
       <Header
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         onOpenSftpModal={() => setIsSftpModalOpen(true)}
-        onOpenProfileModal={() => setIsProfileModalOpen(true)}
+        onOpenProfileModal={() => openProfileModal('profile')}
         onOpenConnectionModal={() => setIsConnectionModalOpen(true)}
       />
 
@@ -112,7 +110,7 @@ export const App: React.FC = () => {
                 <AlertTriangle className="w-5 h-5 text-nebula-warning shrink-0" />
                 <div>
                   <h4 className="text-xs font-semibold text-nebula-warning">
-                    Cambio de contraseña requerido
+                    Rotación de contraseña requerida
                   </h4>
                   <p className="text-[11px] text-slate-300 mt-0.5">
                     Estás usando las credenciales por defecto. Por seguridad de tu servidor, debes actualizar tu contraseña.
@@ -120,8 +118,8 @@ export const App: React.FC = () => {
                 </div>
               </div>
               <button
-                onClick={() => setIsPasswordModalOpen(true)}
-                className="px-3 py-1.5 text-xs font-medium bg-nebula-warning text-slate-950 rounded-lg hover:bg-amber-400 transition-colors shadow-sm"
+                onClick={() => openProfileModal('security')}
+                className="px-3.5 py-1.5 text-xs font-bold bg-nebula-warning text-slate-950 rounded-lg hover:bg-amber-400 transition-colors shadow-sm"
               >
                 Actualizar ahora
               </button>
@@ -170,7 +168,7 @@ export const App: React.FC = () => {
           )}
 
           {currentTab === 'settings' && (
-            <SettingsPage onOpenProfileModal={() => setIsProfileModalOpen(true)} />
+            <SettingsPage onOpenProfileModal={(tab) => openProfileModal(tab || 'profile')} />
           )}
         </main>
       </div>
@@ -194,174 +192,78 @@ export const App: React.FC = () => {
           setIsCreateWizardOpen(true);
         }}
         onOpenSftpModal={() => setIsSftpModalOpen(true)}
-        onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
+        onOpenPasswordModal={() => openProfileModal('security')}
         onLogout={logout}
       />
 
       {/* SFTP Guide Modal for Antigravity IDE */}
       {isSftpModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-nebula-900 border border-nebula-700 rounded-2xl shadow-2xl p-6">
-            <div className="flex items-center gap-2.5 text-nebula-cyber font-bold text-sm mb-2">
-              <Terminal className="w-5 h-5" />
-              <span>Conexión SFTP Directa (Antigravity IDE)</span>
-            </div>
-            <p className="text-xs text-slate-400 leading-relaxed mb-4">
-              Singularity incluye un servidor SFTP nativo en el puerto 2022. Conéctalo desde Antigravity IDE o VS Code para editar archivos en vivo con latencia cero.
-            </p>
-
-            <div className="bg-nebula-950 p-3 rounded-xl border border-nebula-800 font-mono text-xs space-y-2 mb-4">
-              <div className="flex justify-between text-slate-300">
-                <span className="text-slate-500">Host:</span>
-                <span>localhost / IP del VPS</span>
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setIsSftpModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md bg-nebula-900 border border-nebula-750 rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="h-1 w-full bg-nebula-cyber" />
+            <div className="p-6">
+              <div className="flex items-center gap-2.5 text-nebula-cyber font-bold text-sm mb-2">
+                <Terminal className="w-5 h-5" />
+                <span>Conexión SFTP Directa (Antigravity IDE)</span>
               </div>
-              <div className="flex justify-between text-slate-300">
-                <span className="text-slate-500">Puerto SFTP:</span>
-                <span className="text-nebula-accent font-semibold">2022</span>
-              </div>
-              <div className="flex justify-between text-slate-300">
-                <span className="text-slate-500">Usuario:</span>
-                <span>{user.username}</span>
-              </div>
-              <div className="flex justify-between text-slate-300">
-                <span className="text-slate-500">Raíz de Servidores:</span>
-                <span className="text-slate-400">/data/servers</span>
-              </div>
-            </div>
+              <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                Singularity incluye un servidor SFTP nativo en el puerto 2022. Conéctalo desde Antigravity IDE o VS Code para editar archivos en vivo con latencia cero.
+              </p>
 
-            <div className="flex items-center justify-between pt-2">
-              <button
-                onClick={() => {
-                  const sftpHost = window.location.hostname || 'localhost';
-                  navigator.clipboard.writeText(`sftp://${user.username}@${sftpHost}:2022`);
-                  setCopiedSftp(true);
-                  setTimeout(() => setCopiedSftp(false), 2000);
-                }}
-                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
-              >
-                {copiedSftp ? <CheckCircle2 className="w-3.5 h-3.5 text-nebula-accent" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedSftp ? '¡Copiado!' : 'Copiar URI SFTP'}</span>
-              </button>
-              <button
-                onClick={() => setIsSftpModalOpen(false)}
-                className="px-4 py-1.5 bg-nebula-800 hover:bg-nebula-700 text-slate-200 text-xs font-semibold rounded-lg transition-colors"
-              >
-                Entendido
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Change Password Modal */}
-      {isPasswordModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-nebula-900 border border-nebula-700 rounded-2xl shadow-2xl p-6">
-            <h3 className="text-sm font-bold text-slate-100 mb-1">
-              Actualizar Contraseña
-            </h3>
-            <p className="text-xs text-slate-400 mb-4">
-              Ingresa tu contraseña actual y la nueva contraseña (mínimo 8 caracteres).
-            </p>
-
-            {passError && (
-              <div className="mb-4 p-2 rounded-lg bg-red-950/50 border border-red-500/30 text-red-300 text-xs">
-                {passError}
+              <div className="bg-nebula-950 p-3.5 rounded-xl border border-nebula-800 font-mono text-xs space-y-2 mb-4 tabular-nums">
+                <div className="flex justify-between text-slate-300">
+                  <span className="text-slate-500">Host:</span>
+                  <span>localhost / IP del VPS</span>
+                </div>
+                <div className="flex justify-between text-slate-300">
+                  <span className="text-slate-500">Puerto SFTP:</span>
+                  <span className="text-nebula-accent font-semibold">2022</span>
+                </div>
+                <div className="flex justify-between text-slate-300">
+                  <span className="text-slate-500">Usuario:</span>
+                  <span>{user.username}</span>
+                </div>
+                <div className="flex justify-between text-slate-300">
+                  <span className="text-slate-500">Raíz de Servidores:</span>
+                  <span className="text-slate-400">/data/servers</span>
+                </div>
               </div>
-            )}
 
-            {passSuccess ? (
-              <div className="py-4 text-center space-y-3">
-                <CheckCircle2 className="w-8 h-8 text-nebula-accent mx-auto" />
-                <p className="text-xs text-slate-200 font-medium">
-                  Contraseña actualizada exitosamente.
-                </p>
+              <div className="flex items-center justify-between pt-2">
                 <button
                   onClick={() => {
-                    setIsPasswordModalOpen(false);
-                    setPassSuccess(false);
+                    const sftpHost = window.location.hostname || 'localhost';
+                    navigator.clipboard.writeText(`sftp://${user.username}@${sftpHost}:2022`);
+                    setCopiedSftp(true);
+                    setTimeout(() => setCopiedSftp(false), 2000);
                   }}
-                  className="px-4 py-1.5 bg-nebula-accent text-slate-950 text-xs font-semibold rounded-lg"
+                  className="flex items-center gap-1.5 text-xs font-mono text-nebula-cyber hover:text-cyan-300 transition-colors"
                 >
-                  Cerrar
+                  {copiedSftp ? <CheckCircle2 className="w-3.5 h-3.5 text-nebula-accent" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedSftp ? '¡URI Copiada!' : 'Copiar URI SFTP'}</span>
+                </button>
+                <button
+                  onClick={() => setIsSftpModalOpen(false)}
+                  className="px-4 py-1.5 bg-nebula-800 hover:bg-nebula-700 text-slate-200 text-xs font-semibold rounded-lg transition-colors"
+                >
+                  Entendido
                 </button>
               </div>
-            ) : (
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  setPassError(null);
-                  if (newPass !== confirmPass) {
-                    setPassError('Las contraseñas no coinciden');
-                    return;
-                  }
-                  if (newPass.length < 8) {
-                    setPassError('La nueva contraseña debe tener al menos 8 caracteres');
-                    return;
-                  }
-                  try {
-                    await updatePassword(currentPass, newPass);
-                    setPassSuccess(true);
-                  } catch (err: unknown) {
-                    setPassError(err instanceof Error ? err.message : 'Error al cambiar contraseña');
-                  }
-                }}
-                className="space-y-3"
-              >
-                <div>
-                  <label className="block text-[11px] text-slate-300 mb-1">Contraseña Actual</label>
-                  <input
-                    type="password"
-                    required
-                    value={currentPass}
-                    onChange={(e) => setCurrentPass(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs bg-nebula-950 border border-nebula-800 rounded-lg text-slate-100 focus:outline-none focus:border-nebula-accent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-slate-300 mb-1">Nueva Contraseña</label>
-                  <input
-                    type="password"
-                    required
-                    value={newPass}
-                    onChange={(e) => setNewPass(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs bg-nebula-950 border border-nebula-800 rounded-lg text-slate-100 focus:outline-none focus:border-nebula-accent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-slate-300 mb-1">Confirmar Nueva Contraseña</label>
-                  <input
-                    type="password"
-                    required
-                    value={confirmPass}
-                    onChange={(e) => setConfirmPass(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs bg-nebula-950 border border-nebula-800 rounded-lg text-slate-100 focus:outline-none focus:border-nebula-accent"
-                  />
-                </div>
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsPasswordModalOpen(false)}
-                    className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 bg-nebula-accent hover:bg-emerald-600 text-slate-950 text-xs font-semibold rounded-lg transition-colors"
-                  >
-                    Guardar
-                  </button>
-                </div>
-              </form>
-            )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* User Profile & Skin Personalization Modal */}
+      {/* User Profile & Security Personalization Modal */}
       <UserProfileModal
         isOpen={isProfileModalOpen}
+        initialTab={profileModalTab}
         onClose={() => setIsProfileModalOpen(false)}
       />
 

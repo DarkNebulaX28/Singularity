@@ -18,12 +18,15 @@ import {
   X,
   ShieldAlert,
   Sliders,
-  Check
+  Check,
+  Eye,
+  EyeOff,
+  Dices
 } from 'lucide-react';
 
 export const UsersManagementPage: React.FC = () => {
   const { user: currentUser } = useAuth();
-  const { confirm } = useDialog();
+  const { confirm, toast } = useDialog();
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [servers, setServers] = useState<ServerInstanceData[]>([]);
@@ -39,6 +42,7 @@ export const UsersManagementPage: React.FC = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Form Fields
   const [formData, setFormData] = useState({
@@ -77,6 +81,7 @@ export const UsersManagementPage: React.FC = () => {
 
   const openCreateModal = () => {
     setEditingUser(null);
+    setShowPassword(false);
     setFormData({
       username: '',
       password: '',
@@ -93,6 +98,7 @@ export const UsersManagementPage: React.FC = () => {
 
   const openEditModal = (targetUser: UserProfile) => {
     setEditingUser(targetUser);
+    setShowPassword(false);
     const hasAll = !targetUser.allowedServers || targetUser.allowedServers.includes('*');
     setFormData({
       username: targetUser.username,
@@ -108,9 +114,21 @@ export const UsersManagementPage: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const handleGeneratePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*+-=';
+    const array = new Uint32Array(14);
+    window.crypto.getRandomValues(array);
+    const generated = Array.from(array, (x) => chars[x % chars.length]).join('');
+    setFormData((prev) => ({ ...prev, password: generated }));
+    setShowPassword(true);
+    navigator.clipboard.writeText(generated);
+    toast('Contraseña segura generada y copiada al portapapeles', 'info');
+  };
+
   const handleToggleStatus = async (targetUser: UserProfile) => {
     if (targetUser.id === currentUser?.id) {
       setErrorMessage('No puedes deshabilitar tu propia cuenta de administrador');
+      toast('No puedes deshabilitar tu propia cuenta', 'error');
       return;
     }
 
@@ -122,12 +140,14 @@ export const UsersManagementPage: React.FC = () => {
       setUsers((prev) =>
         prev.map((u) => (u.id === targetUser.id ? { ...u, isActive: nextStatus } : u))
       );
-      setSuccessMessage(
-        `Cuenta de @${targetUser.username} ${nextStatus ? 'habilitada' : 'deshabilitada'} correctamente.`
-      );
+      const msg = `Cuenta de @${targetUser.username} ${nextStatus ? 'habilitada' : 'deshabilitada'} correctamente.`;
+      setSuccessMessage(msg);
+      toast(msg, 'success');
       setTimeout(() => setSuccessMessage(null), 3500);
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : 'Error al cambiar estado de la cuenta');
+      const msg = err instanceof Error ? err.message : 'Error al cambiar estado de la cuenta';
+      setErrorMessage(msg);
+      toast(msg, 'error');
     }
   };
 
@@ -151,9 +171,12 @@ export const UsersManagementPage: React.FC = () => {
       await api.delete(`/auth/users/${targetUser.id}`);
       setUsers((prev) => prev.filter((u) => u.id !== targetUser.id));
       setSuccessMessage(`Usuario @${targetUser.username} eliminado correctamente.`);
+      toast(`Usuario @${targetUser.username} eliminado`, 'info');
       setTimeout(() => setSuccessMessage(null), 3500);
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : 'Error al eliminar usuario');
+      const msg = err instanceof Error ? err.message : 'Error al eliminar usuario';
+      setErrorMessage(msg);
+      toast(msg, 'error');
     }
   };
 
@@ -166,7 +189,6 @@ export const UsersManagementPage: React.FC = () => {
 
     try {
       if (editingUser) {
-        // Edit existing user
         const updatePayload: Record<string, any> = {
           role: formData.role,
           isActive: formData.isActive,
@@ -182,8 +204,8 @@ export const UsersManagementPage: React.FC = () => {
         const updated = await api.put<UserProfile>(`/auth/users/${editingUser.id}`, updatePayload);
         setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
         setSuccessMessage(`Usuario @${updated.username} actualizado correctamente.`);
+        toast(`Usuario @${updated.username} actualizado`, 'success');
       } else {
-        // Create new user
         if (!formData.password || formData.password.length < 8) {
           throw new Error('La contraseña debe tener al menos 8 caracteres');
         }
@@ -200,12 +222,15 @@ export const UsersManagementPage: React.FC = () => {
         });
         setUsers((prev) => [...prev, created]);
         setSuccessMessage(`Nuevo usuario @${created.username} creado exitosamente.`);
+        toast(`Cuenta @${created.username} creada`, 'success');
       }
 
       setIsModalOpen(false);
       setTimeout(() => setSuccessMessage(null), 3500);
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : 'Error al guardar usuario');
+      const msg = err instanceof Error ? err.message : 'Error al guardar usuario';
+      setErrorMessage(msg);
+      toast(msg, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -214,14 +239,10 @@ export const UsersManagementPage: React.FC = () => {
   // Filtered users calculation
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
-      // Role filter
       if (roleFilter !== 'ALL' && u.role !== roleFilter) return false;
-
-      // Status filter
       if (statusFilter === 'ACTIVE' && u.isActive === false) return false;
       if (statusFilter === 'DISABLED' && u.isActive !== false) return false;
 
-      // Text search
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
       const matchUser = u.username.toLowerCase().includes(q);
@@ -247,8 +268,8 @@ export const UsersManagementPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-base font-bold text-white flex items-center gap-2">
-              <span>Gestor de Cuentas y Accesos Granulares</span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-nebula-800 text-slate-300">
+              <span>Gestor de Cuentas y Accesos Granulares (RBAC)</span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono tabular-nums font-bold bg-nebula-800 text-slate-300">
                 {totalCount} Registrados
               </span>
             </h1>
@@ -270,7 +291,7 @@ export const UsersManagementPage: React.FC = () => {
 
           <button
             onClick={openCreateModal}
-            className="px-4 py-2 rounded-lg bg-nebula-accent hover:bg-emerald-600 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-nebula-accent/20 transition-all active:scale-95"
+            className="px-4 py-2 rounded-xl bg-nebula-accent hover:bg-emerald-400 active:scale-[0.98] text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-nebula-accent/20 transition-all"
           >
             <UserPlus className="w-4 h-4" />
             <span>Crear Nuevo Usuario</span>
@@ -283,7 +304,7 @@ export const UsersManagementPage: React.FC = () => {
         <div className="bg-nebula-900 border border-nebula-800 rounded-xl p-4 flex flex-col justify-between">
           <span className="text-slate-400 text-xs font-semibold">Total Cuentas</span>
           <div className="flex items-baseline justify-between mt-2">
-            <span className="text-2xl font-bold font-mono text-white">{totalCount}</span>
+            <span className="text-2xl font-bold font-mono tabular-nums text-white">{totalCount}</span>
             <Users className="w-4 h-4 text-nebula-cyber" />
           </div>
         </div>
@@ -291,7 +312,7 @@ export const UsersManagementPage: React.FC = () => {
         <div className="bg-nebula-900 border border-nebula-800 rounded-xl p-4 flex flex-col justify-between">
           <span className="text-slate-400 text-xs font-semibold">Cuentas Activas</span>
           <div className="flex items-baseline justify-between mt-2">
-            <span className="text-2xl font-bold font-mono text-emerald-400">{activeCount}</span>
+            <span className="text-2xl font-bold font-mono tabular-nums text-emerald-400">{activeCount}</span>
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           </div>
         </div>
@@ -299,7 +320,7 @@ export const UsersManagementPage: React.FC = () => {
         <div className="bg-nebula-900 border border-nebula-800 rounded-xl p-4 flex flex-col justify-between">
           <span className="text-slate-400 text-xs font-semibold">Operadores</span>
           <div className="flex items-baseline justify-between mt-2">
-            <span className="text-2xl font-bold font-mono text-cyan-400">{operatorCount}</span>
+            <span className="text-2xl font-bold font-mono tabular-nums text-cyan-400">{operatorCount}</span>
             <Sliders className="w-4 h-4 text-cyan-400" />
           </div>
         </div>
@@ -307,7 +328,7 @@ export const UsersManagementPage: React.FC = () => {
         <div className="bg-nebula-900 border border-nebula-800 rounded-xl p-4 flex flex-col justify-between">
           <span className="text-slate-400 text-xs font-semibold">Deshabilitadas</span>
           <div className="flex items-baseline justify-between mt-2">
-            <span className="text-2xl font-bold font-mono text-slate-500">{disabledCount}</span>
+            <span className="text-2xl font-bold font-mono tabular-nums text-slate-500">{disabledCount}</span>
             <ShieldAlert className="w-4 h-4 text-slate-500" />
           </div>
         </div>
@@ -334,14 +355,14 @@ export const UsersManagementPage: React.FC = () => {
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
-            placeholder="Buscar por usuario o nombre visible..."
+            placeholder="Buscar por usuario, alias o nickname Minecraft..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-nebula-950 border border-nebula-800 text-slate-200 text-xs focus:outline-none focus:border-nebula-accent"
+            className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-nebula-950 border border-nebula-800 text-slate-200 text-xs focus:outline-none focus:border-nebula-accent font-mono"
           />
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto text-xs">
+        <div className="flex items-center gap-2 overflow-x-auto text-xs font-mono">
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value as any)}
@@ -370,7 +391,7 @@ export const UsersManagementPage: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-nebula-800 bg-nebula-950/80 text-slate-400 font-mono text-[11px]">
+              <tr className="border-b border-nebula-800 bg-nebula-950/80 text-slate-400 font-mono text-[11px] uppercase tracking-wider">
                 <th className="py-3 px-4">Usuario & Avatar</th>
                 <th className="py-3 px-4">Rol Asignado</th>
                 <th className="py-3 px-4">Estado de Acceso</th>
@@ -408,10 +429,10 @@ export const UsersManagementPage: React.FC = () => {
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-white font-mono">{u.username}</span>
+                              <span className="font-bold text-white font-mono">@{u.username}</span>
                               {isCurrent && (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-nebula-accent/20 text-nebula-accent border border-nebula-accent/30">
-                                  Tú
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-nebula-accent/20 text-nebula-accent border border-nebula-accent/30 font-bold">
+                                  TÚ
                                 </span>
                               )}
                             </div>
@@ -535,8 +556,15 @@ export const UsersManagementPage: React.FC = () => {
 
       {/* Modal: Create or Edit User */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-lg bg-nebula-900 border border-nebula-750 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-nebula-900 border border-nebula-750 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="h-1 w-full bg-nebula-accent" />
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-nebula-800 flex items-center justify-between bg-nebula-950/60">
               <div className="flex items-center gap-2.5">
@@ -545,7 +573,7 @@ export const UsersManagementPage: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-white">
-                    {editingUser ? `Editar Usuario @${editingUser.username}` : 'Crear Nueva Cuenta'}
+                    {editingUser ? `Editar Operador @${editingUser.username}` : 'Crear Nueva Cuenta'}
                   </h2>
                   <p className="text-xs text-slate-400">
                     Define privilegios de operador, credenciales de acceso y servidores autorizados.
@@ -579,21 +607,41 @@ export const UsersManagementPage: React.FC = () => {
                 />
               </div>
 
-              {/* Password */}
+              {/* Password with Generator & Visibility Toggle */}
               <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-300">
-                  {editingUser
-                    ? 'Nueva Contraseña (dejar en blanco para no cambiarla)'
-                    : 'Contraseña Inicial (mínimo 8 caracteres)'}
-                </label>
-                <input
-                  type="password"
-                  required={!editingUser}
-                  placeholder={editingUser ? '••••••••••••' : 'Contraseña segura...'}
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-3 py-2 text-xs bg-nebula-950 border border-nebula-750 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-nebula-accent font-mono"
-                />
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    {editingUser
+                      ? 'Nueva Contraseña (opcional)'
+                      : 'Contraseña Inicial (mínimo 8 caracteres)'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleGeneratePassword}
+                    className="text-[11px] font-mono text-nebula-cyber hover:text-cyan-300 flex items-center gap-1 transition-colors"
+                  >
+                    <Dices className="w-3.5 h-3.5" />
+                    <span>Generar Clave</span>
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required={!editingUser}
+                    placeholder={editingUser ? 'Dejar vacío para mantener actual...' : 'Contraseña segura...'}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full px-3 py-2 pr-10 text-xs bg-nebula-950 border border-nebula-750 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-nebula-accent font-mono"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
 
               {/* Display Name & Minecraft Skin Nickname */}
@@ -683,6 +731,25 @@ export const UsersManagementPage: React.FC = () => {
                     <Server className="w-3.5 h-3.5 text-nebula-cyber" />
                     Permisos de Servidores
                   </span>
+                  {!formData.allServers && servers.length > 0 && (
+                    <div className="flex items-center gap-2 text-[10px] font-mono">
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, selectedServers: servers.map((s) => s.id) })}
+                        className="text-nebula-cyber hover:underline"
+                      >
+                        Marcar todos
+                      </button>
+                      <span className="text-slate-600">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, selectedServers: [] })}
+                        className="text-slate-400 hover:underline"
+                      >
+                        Limpiar
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-4 text-xs">
@@ -719,7 +786,9 @@ export const UsersManagementPage: React.FC = () => {
                             key={s.id}
                             className="flex items-center justify-between p-1.5 rounded hover:bg-nebula-850 cursor-pointer text-xs"
                           >
-                            <span className="text-slate-200 font-medium">{s.name} ({s.id})</span>
+                            <span className="text-slate-200 font-medium">
+                              {s.name} <span className="font-mono text-[10px] text-slate-500">({s.id})</span>
+                            </span>
                             <input
                               type="checkbox"
                               checked={checked}
@@ -756,7 +825,7 @@ export const UsersManagementPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-2 rounded-lg bg-nebula-accent hover:bg-emerald-600 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-nebula-accent/20 transition-all disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl bg-nebula-accent hover:bg-emerald-400 active:scale-[0.98] text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-nebula-accent/20 transition-all disabled:opacity-50"
                 >
                   {isSubmitting ? (
                     <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />

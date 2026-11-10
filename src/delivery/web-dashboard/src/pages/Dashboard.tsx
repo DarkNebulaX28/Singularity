@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Server, Plus, HardDrive, Activity, RotateCw, Search, Copy, Check } from 'lucide-react';
+import {
+  Server,
+  Plus,
+  HardDrive,
+  Activity,
+  RotateCw,
+  Search,
+  Copy,
+  Check,
+  Play,
+  Square
+} from 'lucide-react';
 import { api } from '../services/api-client.js';
 import { useDialog } from '../context/DialogContext.js';
 import { ServerCard, type ServerInstanceData } from '../components/ServerCard.js';
@@ -18,10 +29,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   isWizardOpen,
   onCloseWizard
 }) => {
-  const { toast } = useDialog();
+  const { confirm, toast } = useDialog();
   const [servers, setServers] = useState<ServerInstanceData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>('all');
   const [copiedSftp, setCopiedSftp] = useState(false);
@@ -58,6 +70,53 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return () => clearInterval(interval);
   }, [fetchServers]);
 
+  const handleStartAll = async () => {
+    const offlineServers = servers.filter((s) => s.status === 'offline' || s.status === 'crashed');
+    if (offlineServers.length === 0) {
+      toast('Todos los servidores ya están en línea o iniciando', 'info');
+      return;
+    }
+
+    const ok = await confirm({
+      title: 'Iniciar Flota de Servidores',
+      message: `¿Deseas arrancar simultáneamente ${offlineServers.length} instancia(s) detenida(s)?`,
+      confirmLabel: `Iniciar (${offlineServers.length})`,
+      variant: 'info'
+    });
+    if (!ok) return;
+
+    setIsBatchRunning(true);
+    try {
+      await Promise.allSettled(offlineServers.map((s) => api.post(`/servers/${s.id}/start`)));
+      toast(`Secuencia de arranque enviada a ${offlineServers.length} servidor(es)`, 'success');
+      fetchServers(true);
+    } finally {
+      setIsBatchRunning(false);
+    }
+  };
+
+  const handleStopAll = async () => {
+    const activeServers = servers.filter((s) => s.status === 'online' || s.status === 'starting');
+    if (activeServers.length === 0) return;
+
+    const ok = await confirm({
+      title: 'Detener Todos los Servidores',
+      message: `¿Confirmas el apagado ordenado (/stop) de las ${activeServers.length} instancia(s) actualmente en línea?`,
+      confirmLabel: `Detener Todos (${activeServers.length})`,
+      variant: 'warning'
+    });
+    if (!ok) return;
+
+    setIsBatchRunning(true);
+    try {
+      await Promise.allSettled(activeServers.map((s) => api.post(`/servers/${s.id}/stop`)));
+      toast(`Orden de parada enviada a ${activeServers.length} servidor(es)`, 'info');
+      fetchServers(true);
+    } finally {
+      setIsBatchRunning(false);
+    }
+  };
+
   // Filtered servers list
   const filteredServers = useMemo(() => {
     return servers.filter((s) => {
@@ -88,24 +147,54 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2.5">
             <Server className="w-6 h-6 text-nebula-accent" />
             <span>Mission Control</span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono tabular-nums bg-nebula-900 border border-nebula-800 text-nebula-cyber uppercase">
+              FLOTA: {servers.length} NODOS
+            </span>
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Panel de control central y telemetría en tiempo real de instancias de Minecraft
+            Panel de control central, orquestación multi-instancia y telemetría en tiempo real.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {servers.length > 1 && (
+            <div className="flex items-center gap-1.5 mr-1">
+              <button
+                type="button"
+                disabled={isBatchRunning || onlineCount === servers.length}
+                onClick={handleStartAll}
+                className="px-2.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-40"
+                title="Iniciar todas las instancias detenidas"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span className="hidden sm:inline">Iniciar Todos</span>
+              </button>
+              {onlineCount > 0 && (
+                <button
+                  type="button"
+                  disabled={isBatchRunning}
+                  onClick={handleStopAll}
+                  className="px-2.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-mono font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-40"
+                  title="Detener ordenadamente todas las instancias activas"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  <span className="hidden sm:inline">Detener Todos</span>
+                </button>
+              )}
+            </div>
+          )}
+
           <button
             onClick={() => fetchServers()}
-            className="p-2 rounded-lg bg-nebula-900 border border-nebula-800 text-slate-400 hover:text-slate-200 transition-colors"
-            title="Refrescar lista"
+            className="p-2 rounded-xl bg-nebula-900 border border-nebula-800 text-slate-400 hover:text-slate-200 transition-colors"
+            title="Refrescar telemetría de flota"
           >
-            <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-nebula-cyber' : ''}`} />
           </button>
 
           <button
             onClick={onOpenWizard}
-            className="flex items-center gap-2 px-4 py-2 bg-nebula-accent hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-nebula-accent/20 transition-all"
+            className="flex items-center gap-2 px-4 py-2 bg-nebula-accent hover:bg-emerald-400 active:scale-[0.98] text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-nebula-accent/20 transition-all"
           >
             <Plus className="w-4 h-4" />
             <span>Crear Servidor</span>
@@ -119,7 +208,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="bg-nebula-900/90 border border-nebula-800 rounded-xl p-4 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-[11px] font-medium text-slate-400">Servidores Activos</span>
-            <div className="text-2xl font-bold font-mono text-slate-100 mt-1 flex items-baseline gap-2">
+            <div className="text-2xl font-bold font-mono tabular-nums text-slate-100 mt-1 flex items-baseline gap-2">
               <span className="text-nebula-accent">{onlineCount}</span>
               <span className="text-xs text-slate-500">/ {servers.length} total</span>
             </div>
@@ -138,10 +227,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="bg-nebula-900/90 border border-nebula-800 rounded-xl p-4 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-[11px] font-medium text-slate-400">Memoria RAM Reservada</span>
-            <div className="text-2xl font-bold font-mono text-slate-100 mt-1">
+            <div className="text-2xl font-bold font-mono tabular-nums text-slate-100 mt-1">
               {(totalMemoryAllocatedMb / 1024).toFixed(1)} <span className="text-xs text-slate-500 font-sans font-normal">GB</span>
             </div>
-            <span className="text-[10px] text-slate-500 font-mono mt-0.5 block">
+            <span className="text-[10px] text-slate-500 font-mono tabular-nums mt-0.5 block">
               {totalMemoryAllocatedMb} MB en instancias
             </span>
           </div>
@@ -190,7 +279,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             />
           </div>
 
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-nebula-900 border border-nebula-800 text-xs font-mono self-start sm:self-auto">
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-nebula-900 border border-nebula-800 text-xs font-mono tabular-nums self-start sm:self-auto">
             <button
               onClick={() => setStatusFilter('all')}
               className={`px-3 py-1 rounded-lg transition-all ${
@@ -241,7 +330,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </p>
           <button
             onClick={onOpenWizard}
-            className="px-4 py-2 bg-nebula-accent text-slate-950 text-xs font-semibold rounded-lg hover:bg-emerald-600 transition-all shadow-lg shadow-nebula-accent/20"
+            className="px-4 py-2 bg-nebula-accent text-slate-950 text-xs font-bold rounded-xl hover:bg-emerald-400 transition-all shadow-lg shadow-nebula-accent/20"
           >
             Abrir Asistente de Creación
           </button>

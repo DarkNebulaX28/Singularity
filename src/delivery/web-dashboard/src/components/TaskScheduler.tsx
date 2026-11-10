@@ -14,7 +14,8 @@ import {
   ToggleLeft,
   ToggleRight,
   Calendar,
-  X
+  X,
+  Zap
 } from 'lucide-react';
 
 interface ScheduledTask {
@@ -44,7 +45,7 @@ interface TaskSchedulerProps {
 }
 
 export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
-  const { confirm } = useDialog();
+  const { confirm, toast } = useDialog();
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -101,9 +102,14 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
         body: JSON.stringify({ enabled: !task.enabled })
       });
       if (!res.ok) throw new Error('Error al cambiar estado de la tarea');
+      toast(
+        `Tarea "${task.name}" ${!task.enabled ? 'activada' : 'pausada'}`,
+        !task.enabled ? 'success' : 'info'
+      );
       fetchTasks();
     } catch (err: any) {
       setErrorMsg(err.message);
+      toast(err.message, 'error');
     }
   };
 
@@ -117,11 +123,14 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al ejecutar la tarea');
-      setSuccessMsg(data.message || 'Tarea ejecutada con éxito');
+      const msg = data.message || 'Tarea ejecutada con éxito';
+      setSuccessMsg(msg);
+      toast(msg, 'success');
       setTimeout(() => setSuccessMsg(null), 4000);
       fetchTasks();
     } catch (err: any) {
       setErrorMsg(err.message);
+      toast(err.message, 'error');
     } finally {
       setExecutingTaskId(null);
     }
@@ -141,9 +150,50 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
         headers: getAuthHeader()
       });
       if (!res.ok) throw new Error('Error al eliminar la tarea');
+      toast('Tarea programada eliminada', 'info');
       fetchTasks();
     } catch (err: any) {
       setErrorMsg(err.message);
+      toast(err.message, 'error');
+    }
+  };
+
+  const handleQuickTemplate = async (preset: {
+    name: string;
+    action: 'backup' | 'restart' | 'command';
+    scheduleType: 'interval' | 'daily';
+    intervalMinutes?: number;
+    timeOfDay?: string;
+    payload?: Record<string, any>;
+  }) => {
+    try {
+      setIsSaving(true);
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeader()
+        },
+        body: JSON.stringify({
+          serverId,
+          name: preset.name,
+          action: preset.action,
+          scheduleType: preset.scheduleType,
+          intervalMinutes: preset.intervalMinutes,
+          timeOfDay: preset.timeOfDay,
+          payload: preset.payload || {},
+          enabled: true
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al crear plantilla');
+      toast(`Tarea "${preset.name}" programada automáticamente`, 'success');
+      fetchTasks();
+    } catch (err: any) {
+      setErrorMsg(err.message);
+      toast(err.message, 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -182,12 +232,14 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
       if (!res.ok) throw new Error(data.error || 'Error al crear la tarea programada');
 
       setIsModalOpen(false);
+      toast(`Tarea "${taskName.trim()}" creada con éxito`, 'success');
       setTaskName('');
       setBackupComment('');
       setCommand('save-all');
       fetchTasks();
     } catch (err: any) {
       setErrorMsg(err.message);
+      toast(err.message, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -212,7 +264,7 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-nebula-950/40 rounded-xl border border-nebula-800 p-5 overflow-y-auto">
+    <div className="h-full flex flex-col bg-nebula-900 rounded-2xl border border-nebula-800 p-5 overflow-y-auto space-y-4 shadow-md">
       {/* Header bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-nebula-800 shrink-0">
         <div className="flex items-center gap-3">
@@ -222,8 +274,8 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
           <div>
             <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
               <span>Programador de Tareas (Cron & Scheduler)</span>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-nebula-800 text-nebula-accent border border-nebula-700 font-normal">
-                {tasks.length} {tasks.length === 1 ? 'tarea' : 'tareas'}
+              <span className="text-[11px] font-mono tabular-nums px-2 py-0.5 rounded-full bg-nebula-800 text-nebula-accent border border-nebula-700 font-normal">
+                {tasks.length} {tasks.length === 1 ? 'activa' : 'tareas'}
               </span>
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -237,15 +289,15 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
             type="button"
             onClick={fetchTasks}
             disabled={isLoading}
-            className="p-2 rounded-lg bg-nebula-900 hover:bg-nebula-850 text-slate-300 border border-nebula-800 transition-colors disabled:opacity-50"
+            className="p-2 rounded-lg bg-nebula-950 hover:bg-nebula-850 text-slate-300 border border-nebula-800 transition-colors disabled:opacity-50"
             title="Refrescar lista"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-nebula-cyber' : ''}`} />
           </button>
           <button
             type="button"
             onClick={() => setIsModalOpen(true)}
-            className="px-3.5 py-2 rounded-lg bg-nebula-accent hover:bg-emerald-600 text-slate-950 font-semibold text-xs flex items-center gap-1.5 shadow-lg shadow-nebula-accent/20 transition-all"
+            className="px-3.5 py-2 rounded-xl bg-nebula-accent hover:bg-emerald-400 active:scale-[0.98] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-nebula-accent/20 transition-all"
           >
             <Plus className="w-4 h-4" />
             <span>Nueva Tarea Programada</span>
@@ -253,9 +305,68 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
         </div>
       </div>
 
+      {/* 1-Click Tactical Automation Templates Bar */}
+      <div className="p-3 rounded-xl bg-nebula-950/90 border border-nebula-850 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+        <span className="text-[11px] font-mono text-slate-400 font-semibold flex items-center gap-1.5">
+          <Zap className="w-3.5 h-3.5 text-nebula-accent" />
+          <span>Plantillas Automatizadas 1-Clic:</span>
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={() =>
+              handleQuickTemplate({
+                name: 'Auto-Backup Cada 6 Horas',
+                action: 'backup',
+                scheduleType: 'interval',
+                intervalMinutes: 360,
+                payload: { backupComment: 'Auto-Backup programado (6h)' }
+              })
+            }
+            className="px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/30 font-mono text-[11px] transition-all active:scale-[0.98]"
+          >
+            + 🛡️ Auto-Backup (Cada 6h)
+          </button>
+
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={() =>
+              handleQuickTemplate({
+                name: 'Reinicio Nocturno Preventivo',
+                action: 'restart',
+                scheduleType: 'daily',
+                timeOfDay: '04:00'
+              })
+            }
+            className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono text-[11px] transition-all active:scale-[0.98]"
+          >
+            + 🔄 Reinicio Diario (04:00 AM)
+          </button>
+
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={() =>
+              handleQuickTemplate({
+                name: 'Guardado de Mundo (save-all)',
+                action: 'command',
+                scheduleType: 'interval',
+                intervalMinutes: 30,
+                payload: { command: 'save-all' }
+              })
+            }
+            className="px-2.5 py-1 rounded-lg bg-nebula-cyber/10 hover:bg-nebula-cyber/20 text-nebula-cyber border border-nebula-cyber/30 font-mono text-[11px] transition-all active:scale-[0.98]"
+          >
+            + 💾 Save-All (Cada 30m)
+          </button>
+        </div>
+      </div>
+
       {/* Messages */}
       {errorMsg && (
-        <div className="my-3 p-3 rounded-lg bg-rose-950/60 border border-rose-500/40 text-rose-200 text-xs flex items-center justify-between">
+        <div className="p-3 rounded-lg bg-rose-950/60 border border-rose-500/40 text-rose-200 text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
             <span>{errorMsg}</span>
@@ -267,27 +378,27 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
       )}
 
       {successMsg && (
-        <div className="my-3 p-3 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2">
+        <div className="p-3 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {/* Tasks Grid / List */}
-      <div className="flex-1 min-h-0 pt-4">
+      <div className="flex-1 min-h-0">
         {isLoading && tasks.length === 0 ? (
           <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-3">
             <div className="w-6 h-6 border-2 border-nebula-accent border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs">Cargando tareas programadas...</span>
+            <span className="text-xs font-mono">Cargando tareas programadas...</span>
           </div>
         ) : tasks.length === 0 ? (
-          <div className="h-64 flex flex-col items-center justify-center text-slate-400 border border-dashed border-nebula-800/80 rounded-xl p-8 text-center">
+          <div className="h-64 flex flex-col items-center justify-center text-slate-400 border border-dashed border-nebula-800/80 rounded-xl p-8 text-center bg-nebula-950/30">
             <div className="p-4 rounded-full bg-nebula-900/80 text-slate-500 mb-3 border border-nebula-800">
               <Calendar className="w-8 h-8" />
             </div>
             <h3 className="text-sm font-semibold text-slate-200">No hay tareas programadas</h3>
             <p className="text-xs text-slate-400 max-w-sm mt-1">
-              Configura auto-backups cada 6 horas o reinicios diarios programados para mantener tu servidor Minecraft optimizado y libre de fugas de memoria.
+              Usa los botones rápidos de arriba para activar auto-backups cada 6 horas o reinicios preventivos con un solo clic.
             </p>
             <button
               type="button"
@@ -295,7 +406,7 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
               className="mt-4 px-3.5 py-2 rounded-lg bg-nebula-800 hover:bg-nebula-750 text-nebula-cyber border border-nebula-700 text-xs font-semibold flex items-center gap-1.5 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Programar Primera Tarea</span>
+              <span>Crear Tarea Personalizada</span>
             </button>
           </div>
         ) : (
@@ -308,8 +419,8 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
                   key={task.id}
                   className={`flex flex-col justify-between p-4 rounded-xl border transition-all ${
                     task.enabled
-                      ? 'bg-nebula-900/90 border-nebula-800 hover:border-nebula-700'
-                      : 'bg-nebula-950/60 border-nebula-850 opacity-60'
+                      ? 'bg-nebula-950/80 border-nebula-800 hover:border-nebula-700'
+                      : 'bg-nebula-950/40 border-nebula-850 opacity-60'
                   }`}
                 >
                   <div>
@@ -367,16 +478,16 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
 
                     {/* Command preview if action is command */}
                     {task.action === 'command' && task.payload?.command && (
-                      <div className="mt-2 px-2.5 py-1 rounded bg-black/40 border border-nebula-800 text-[11px] font-mono text-slate-300 truncate">
+                      <div className="mt-2 px-2.5 py-1 rounded bg-black/50 border border-nebula-800 text-[11px] font-mono text-nebula-cyber truncate">
                         /{task.payload.command}
                       </div>
                     )}
 
                     {/* Next run time */}
-                    <div className="mt-2.5 pt-2.5 border-t border-nebula-800/80 flex items-center justify-between text-[11px]">
-                      <span className="text-slate-400">Próxima ejecución:</span>
-                      <span className="font-mono text-slate-300">
-                        {task.nextRunAt ? new Date(task.nextRunAt).toLocaleString() : 'No calculada'}
+                    <div className="mt-2.5 pt-2.5 border-t border-nebula-800/80 flex items-center justify-between text-[11px] font-mono tabular-nums">
+                      <span className="text-slate-400 font-sans">Próxima:</span>
+                      <span className="text-slate-300">
+                        {task.nextRunAt ? new Date(task.nextRunAt).toLocaleString() : 'Pendiente'}
                       </span>
                     </div>
 
@@ -400,7 +511,7 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
                         </span>
                       )}
                       {(!task.lastStatus || task.lastStatus === 'idle') && (
-                        <span className="text-slate-400">En espera</span>
+                        <span className="text-slate-400 font-mono text-[10px]">EN ESPERA</span>
                       )}
                     </div>
                   </div>
@@ -445,218 +556,243 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
 
       {/* Modal: Create Scheduled Task */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-nebula-900 border border-nebula-750 rounded-2xl w-full max-w-lg shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-nebula-800">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-nebula-800 text-nebula-cyber">
-                  <Clock className="w-4 h-4" />
-                </div>
-                <h3 className="text-base font-bold text-slate-100">Nueva Tarea Programada</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-nebula-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateTask} className="mt-4 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Nombre Descriptivo</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="ej. Auto-Backup Nocturno o Reinicio Diario"
-                  value={taskName}
-                  onChange={(e) => setTaskName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-nebula-950 border border-nebula-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-nebula-accent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Tipo de Acción</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setAction('backup')}
-                    className={`p-2.5 rounded-lg border text-xs font-medium flex flex-col items-center gap-1.5 transition-colors ${
-                      action === 'backup'
-                        ? 'bg-blue-950/60 border-blue-500 text-blue-300'
-                        : 'bg-nebula-950 border-nebula-800 text-slate-400 hover:border-nebula-700'
-                    }`}
-                  >
-                    <Archive className="w-4 h-4" />
-                    <span>Auto-Backup</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAction('restart')}
-                    className={`p-2.5 rounded-lg border text-xs font-medium flex flex-col items-center gap-1.5 transition-colors ${
-                      action === 'restart'
-                        ? 'bg-amber-950/60 border-amber-500 text-amber-300'
-                        : 'bg-nebula-950 border-nebula-800 text-slate-400 hover:border-nebula-700'
-                    }`}
-                  >
-                    <RotateCw className="w-4 h-4" />
-                    <span>Reinicio</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAction('command')}
-                    className={`p-2.5 rounded-lg border text-xs font-medium flex flex-col items-center gap-1.5 transition-colors ${
-                      action === 'command'
-                        ? 'bg-cyan-950/60 border-cyan-500 text-cyan-300'
-                        : 'bg-nebula-950 border-nebula-800 text-slate-400 hover:border-nebula-700'
-                    }`}
-                  >
-                    <Terminal className="w-4 h-4" />
-                    <span>Comando</span>
-                  </button>
-                </div>
-              </div>
-
-              {action === 'backup' && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Nota o Comentario del Backup (Opcional)</label>
-                  <input
-                    type="text"
-                    placeholder="ej. Respaldo previo a mantenimiento semanal"
-                    value={backupComment}
-                    onChange={(e) => setBackupComment(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-nebula-950 border border-nebula-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-nebula-accent"
-                  />
-                </div>
-              )}
-
-              {action === 'command' && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Comando de Minecraft a Ejecutar</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="ej. save-all, say Servidor operativo, weather clear"
-                    value={command}
-                    onChange={(e) => setCommand(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-nebula-950 border border-nebula-800 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-nebula-accent"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Frecuencia / Programación</label>
-                <div className="grid grid-cols-3 gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={() => setScheduleType('interval')}
-                    className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
-                      scheduleType === 'interval'
-                        ? 'bg-nebula-accent/10 border-nebula-accent text-nebula-accent'
-                        : 'bg-nebula-950 border-nebula-800 text-slate-400'
-                    }`}
-                  >
-                    Por Intervalo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setScheduleType('daily')}
-                    className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
-                      scheduleType === 'daily'
-                        ? 'bg-nebula-accent/10 border-nebula-accent text-nebula-accent'
-                        : 'bg-nebula-950 border-nebula-800 text-slate-400'
-                    }`}
-                  >
-                    Diario
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setScheduleType('cron')}
-                    className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
-                      scheduleType === 'cron'
-                        ? 'bg-nebula-accent/10 border-nebula-accent text-nebula-accent'
-                        : 'bg-nebula-950 border-nebula-800 text-slate-400'
-                    }`}
-                  >
-                    Expresión Cron
-                  </button>
-                </div>
-
-                {scheduleType === 'interval' && (
-                  <div>
-                    <select
-                      value={intervalMinutes}
-                      onChange={(e) => setIntervalMinutes(Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-lg bg-nebula-950 border border-nebula-800 text-xs text-slate-200 focus:outline-none focus:border-nebula-accent"
-                    >
-                      <option value={30}>Cada 30 minutos</option>
-                      <option value={60}>Cada 1 hora</option>
-                      <option value={120}>Cada 2 horas</option>
-                      <option value={360}>Cada 6 horas (Recomendado para Backups)</option>
-                      <option value={720}>Cada 12 horas</option>
-                      <option value={1440}>Cada 24 horas</option>
-                    </select>
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-nebula-900 border border-nebula-750 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden"
+          >
+            <div className="h-1 w-full bg-nebula-cyber" />
+            <div className="p-6">
+              <div className="flex items-center justify-between pb-3 border-b border-nebula-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-nebula-800 text-nebula-cyber">
+                    <Clock className="w-4 h-4" />
                   </div>
-                )}
-
-                {scheduleType === 'daily' && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400">Ejecutar todos los días a las:</span>
-                    <input
-                      type="time"
-                      value={timeOfDay}
-                      onChange={(e) => setTimeOfDay(e.target.value)}
-                      className="px-3 py-1.5 rounded-lg bg-nebula-950 border border-nebula-800 text-xs font-mono text-slate-200 focus:outline-none focus:border-nebula-accent"
-                    />
-                  </div>
-                )}
-
-                {scheduleType === 'cron' && (
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="0 4 * * * (minuto hora día mes día-semana)"
-                      value={cronExpression}
-                      onChange={(e) => setCronExpression(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-nebula-950 border border-nebula-800 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-nebula-accent"
-                    />
-                    <p className="text-[11px] text-slate-500 mt-1">Formato estándar de 5 campos cron.</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="pt-2 border-t border-nebula-800">
-                <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={applyToAll}
-                    onChange={(e) => setApplyToAll(e.target.checked)}
-                    className="w-4 h-4 rounded bg-nebula-950 border-nebula-800 text-nebula-accent focus:ring-0"
-                  />
-                  <span>Aplicar esta tarea como regla GLOBAL para todos los servidores actuales y futuros</span>
-                </label>
-              </div>
-
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-nebula-800">
+                  <h3 className="text-base font-bold text-slate-100">Nueva Tarea Programada</h3>
+                </div>
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-lg bg-nebula-850 hover:bg-nebula-800 text-slate-300 text-xs font-medium transition-colors"
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-nebula-800"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-4 py-2 rounded-lg bg-nebula-accent hover:bg-emerald-600 text-slate-950 font-semibold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                >
-                  {isSaving ? 'Guardando...' : 'Crear Tarea Programada'}
+                  <X className="w-4 h-4" />
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleCreateTask} className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Nombre Descriptivo</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="ej. Auto-Backup Nocturno o Reinicio Diario"
+                    value={taskName}
+                    onChange={(e) => setTaskName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-nebula-950 border border-nebula-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-nebula-accent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Tipo de Acción</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAction('backup')}
+                      className={`p-2.5 rounded-lg border text-xs font-medium flex flex-col items-center gap-1.5 transition-colors ${
+                        action === 'backup'
+                          ? 'bg-blue-950/60 border-blue-500 text-blue-300'
+                          : 'bg-nebula-950 border-nebula-800 text-slate-400 hover:border-nebula-700'
+                      }`}
+                    >
+                      <Archive className="w-4 h-4" />
+                      <span>Auto-Backup</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAction('restart')}
+                      className={`p-2.5 rounded-lg border text-xs font-medium flex flex-col items-center gap-1.5 transition-colors ${
+                        action === 'restart'
+                          ? 'bg-amber-950/60 border-amber-500 text-amber-300'
+                          : 'bg-nebula-950 border-nebula-800 text-slate-400 hover:border-nebula-700'
+                      }`}
+                    >
+                      <RotateCw className="w-4 h-4" />
+                      <span>Reinicio</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAction('command')}
+                      className={`p-2.5 rounded-lg border text-xs font-medium flex flex-col items-center gap-1.5 transition-colors ${
+                        action === 'command'
+                          ? 'bg-cyan-950/60 border-cyan-500 text-cyan-300'
+                          : 'bg-nebula-950 border-nebula-800 text-slate-400 hover:border-nebula-700'
+                      }`}
+                    >
+                      <Terminal className="w-4 h-4" />
+                      <span>Comando</span>
+                    </button>
+                  </div>
+                </div>
+
+                {action === 'backup' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Nota o Comentario del Backup (Opcional)</label>
+                    <input
+                      type="text"
+                      placeholder="ej. Respaldo previo a mantenimiento semanal"
+                      value={backupComment}
+                      onChange={(e) => setBackupComment(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-nebula-950 border border-nebula-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-nebula-accent"
+                    />
+                  </div>
+                )}
+
+                {action === 'command' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Comando de Minecraft a Ejecutar</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="ej. save-all, say Servidor operativo, chunky continue"
+                      value={command}
+                      onChange={(e) => setCommand(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-nebula-950 border border-nebula-800 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-nebula-accent"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Frecuencia / Programación</label>
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setScheduleType('interval')}
+                      className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
+                        scheduleType === 'interval'
+                          ? 'bg-nebula-accent/10 border-nebula-accent text-nebula-accent'
+                          : 'bg-nebula-950 border-nebula-800 text-slate-400'
+                      }`}
+                    >
+                      Por Intervalo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setScheduleType('daily')}
+                      className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
+                        scheduleType === 'daily'
+                          ? 'bg-nebula-accent/10 border-nebula-accent text-nebula-accent'
+                          : 'bg-nebula-950 border-nebula-800 text-slate-400'
+                      }`}
+                    >
+                      Diario
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setScheduleType('cron')}
+                      className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
+                        scheduleType === 'cron'
+                          ? 'bg-nebula-accent/10 border-nebula-accent text-nebula-accent'
+                          : 'bg-nebula-950 border-nebula-800 text-slate-400'
+                      }`}
+                    >
+                      Expresión Cron
+                    </button>
+                  </div>
+
+                  {scheduleType === 'interval' && (
+                    <div>
+                      <select
+                        value={intervalMinutes}
+                        onChange={(e) => setIntervalMinutes(Number(e.target.value))}
+                        className="w-full px-3 py-2 rounded-lg bg-nebula-950 border border-nebula-800 text-xs text-slate-200 focus:outline-none focus:border-nebula-accent font-mono"
+                      >
+                        <option value={30}>Cada 30 minutos</option>
+                        <option value={60}>Cada 1 hora</option>
+                        <option value={120}>Cada 2 horas</option>
+                        <option value={360}>Cada 6 horas (Recomendado para Backups)</option>
+                        <option value={720}>Cada 12 horas</option>
+                        <option value={1440}>Cada 24 horas</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {scheduleType === 'daily' && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400">Ejecutar todos los días a las:</span>
+                      <input
+                        type="time"
+                        value={timeOfDay}
+                        onChange={(e) => setTimeOfDay(e.target.value)}
+                        className="px-3 py-1.5 rounded-lg bg-nebula-950 border border-nebula-800 text-xs font-mono text-slate-200 focus:outline-none focus:border-nebula-accent"
+                      />
+                    </div>
+                  )}
+
+                  {scheduleType === 'cron' && (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        placeholder="0 4 * * * (minuto hora día mes día-semana)"
+                        value={cronExpression}
+                        onChange={(e) => setCronExpression(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-nebula-950 border border-nebula-800 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-nebula-accent"
+                      />
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { expr: '0 * * * *', label: 'Cada hora' },
+                          { expr: '0 */6 * * *', label: 'Cada 6h' },
+                          { expr: '0 4 * * *', label: 'Diario 4AM' },
+                          { expr: '0 3 * * 0', label: 'Domingos 3AM' }
+                        ].map((cp) => (
+                          <button
+                            key={cp.expr}
+                            type="button"
+                            onClick={() => setCronExpression(cp.expr)}
+                            className="px-2 py-0.5 rounded bg-nebula-950 hover:bg-nebula-800 border border-nebula-800 text-[10px] font-mono text-slate-400 hover:text-nebula-cyber transition-colors"
+                          >
+                            {cp.label} ({cp.expr})
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-nebula-800">
+                  <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={applyToAll}
+                      onChange={(e) => setApplyToAll(e.target.checked)}
+                      className="w-4 h-4 rounded bg-nebula-950 border-nebula-800 text-nebula-accent focus:ring-0"
+                    />
+                    <span>Aplicar esta tarea como regla GLOBAL para todos los servidores actuales y futuros</span>
+                  </label>
+                </div>
+
+                <div className="pt-4 flex items-center justify-end gap-3 border-t border-nebula-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2 rounded-lg bg-nebula-850 hover:bg-nebula-800 text-slate-300 text-xs font-medium transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-4 py-2 rounded-xl bg-nebula-accent hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                  >
+                    {isSaving ? 'Guardando...' : 'Crear Tarea Programada'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}

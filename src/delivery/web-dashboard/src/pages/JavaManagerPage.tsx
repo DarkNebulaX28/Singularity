@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Cpu,
   Download,
@@ -9,9 +9,13 @@ import {
   Sparkles,
   Info,
   ShieldCheck,
-  FolderOpen
+  FolderOpen,
+  Copy,
+  Check,
+  Terminal
 } from 'lucide-react';
 import { api } from '../services/api-client.js';
+import { useDialog } from '../context/DialogContext.js';
 
 export interface JavaRuntimeInfo {
   id: string;
@@ -75,12 +79,19 @@ const TEMURIN_PRESETS: TemurinPreset[] = [
 ];
 
 export const JavaManagerPage: React.FC = () => {
+  const { toast } = useDialog();
   const [runtimes, setRuntimes] = useState<JavaRuntimeInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [downloadingVersion, setDownloadingVersion] = useState<number | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [copiedPathId, setCopiedPathId] = useState<string | null>(null);
+
+  // JVM Flags Optimizer State
+  const [flagRamGb, setFlagRamGb] = useState<number>(8);
+  const [flagProfile, setFlagProfile] = useState<'aikar' | 'zgc'>('aikar');
+  const [copiedFlags, setCopiedFlags] = useState(false);
 
   const fetchRuntimes = useCallback(async (quiet = false) => {
     if (!quiet) setIsScanning(true);
@@ -107,14 +118,44 @@ export const JavaManagerPage: React.FC = () => {
 
     try {
       await api.post('/java/download', { majorVersion });
-      setActionSuccess(`¡Java ${majorVersion} LTS descargado e instalado correctamente en Singularity!`);
+      const msg = `¡Java ${majorVersion} LTS descargado e instalado correctamente en Singularity!`;
+      setActionSuccess(msg);
+      toast(msg, 'success');
       await fetchRuntimes(true);
       setTimeout(() => setActionSuccess(null), 5000);
     } catch (err: unknown) {
-      setActionError(err instanceof Error ? err.message : `Error al descargar Java ${majorVersion}`);
+      const msg = err instanceof Error ? err.message : `Error al descargar Java ${majorVersion}`;
+      setActionError(msg);
+      toast(msg, 'error');
     } finally {
       setDownloadingVersion(null);
     }
+  };
+
+  const handleCopyPath = (id: string, path: string) => {
+    navigator.clipboard.writeText(path);
+    setCopiedPathId(id);
+    toast('Ruta del binario Java copiada al portapapeles', 'info');
+    setTimeout(() => setCopiedPathId(null), 2000);
+  };
+
+  const generatedFlags = useMemo(() => {
+    const mb = flagRamGb * 1024;
+    if (flagProfile === 'zgc') {
+      return `java -Xms${mb}M -Xmx${mb}M -XX:+UseZGC -XX:+ZGenerational -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+PerfDisableSharedMem -jar server.jar nogui`;
+    }
+    const g1NewSize = flagRamGb >= 12 ? 40 : 30;
+    const g1MaxNew = flagRamGb >= 12 ? 50 : 40;
+    const g1HeapRegion = flagRamGb >= 12 ? '16M' : '8M';
+    const g1Reserve = flagRamGb >= 12 ? 15 : 20;
+    return `java -Xms${mb}M -Xmx${mb}M -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=${g1NewSize} -XX:G1MaxNewSizePercent=${g1MaxNew} -XX:G1HeapRegionSize=${g1HeapRegion} -XX:G1ReservePercent=${g1Reserve} -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar server.jar nogui`;
+  }, [flagRamGb, flagProfile]);
+
+  const handleCopyFlags = () => {
+    navigator.clipboard.writeText(generatedFlags);
+    setCopiedFlags(true);
+    toast('Flags JVM optimizados copiados al portapapeles', 'success');
+    setTimeout(() => setCopiedFlags(false), 2000);
   };
 
   const hasJavaVersion = (v: number) => runtimes.some((r) => r.majorVersion === v);
@@ -126,10 +167,10 @@ export const JavaManagerPage: React.FC = () => {
         <div>
           <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2.5">
             <Cpu className="w-6 h-6 text-nebula-cyber" />
-            <span>Gestor de Runtimes Java</span>
+            <span>Gestor de Runtimes Java & Optimizador JVM</span>
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Detección automática de JVM en tu sistema y descargas de binarios portables de Eclipse Temurin (Adoptium).
+            Detección automática de JVM en tu sistema, descargas portables Eclipse Temurin (Adoptium) y generador de flags anti-lag.
           </p>
         </div>
 
@@ -139,7 +180,7 @@ export const JavaManagerPage: React.FC = () => {
           className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold bg-nebula-900 border border-nebula-800 text-slate-300 hover:text-white rounded-xl hover:bg-nebula-850 transition-colors shadow-sm disabled:opacity-50"
         >
           <RotateCw className={`w-4 h-4 ${isScanning ? 'animate-spin text-nebula-cyber' : ''}`} />
-          <span>{isScanning ? 'Escanenado Host...' : 'Re-escanear Host'}</span>
+          <span>{isScanning ? 'Escaneando Host...' : 'Re-escanear Host'}</span>
         </button>
       </div>
 
@@ -163,7 +204,7 @@ export const JavaManagerPage: React.FC = () => {
         <div className="p-4 rounded-xl bg-nebula-900 border border-nebula-800 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-[11px] text-slate-400 font-medium">Runtimes Detectados</span>
-            <div className="text-2xl font-bold font-mono text-white mt-1">
+            <div className="text-2xl font-bold font-mono tabular-nums text-white mt-1">
               {runtimes.length} <span className="text-xs text-slate-500 font-sans font-normal">instalados</span>
             </div>
             <span className="text-[10px] text-slate-500 font-mono mt-0.5 block">
@@ -177,11 +218,11 @@ export const JavaManagerPage: React.FC = () => {
 
         <div className="p-4 rounded-xl bg-nebula-900 border border-nebula-800 shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-[11px] text-slate-400 font-medium">Java Moderno (21 LTS)</span>
+            <span className="text-[11px] text-slate-400 font-medium">Java Moderno (21 / 25 LTS)</span>
             <div className="text-base font-bold font-mono mt-1 flex items-center gap-2">
-              {hasJavaVersion(21) ? (
+              {hasJavaVersion(21) || hasJavaVersion(25) ? (
                 <span className="text-emerald-400 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4" /> Listo (1.20.5 - 1.21.4)
+                  <CheckCircle2 className="w-4 h-4" /> Listo (1.20.5 - 26.3+)
                 </span>
               ) : (
                 <span className="text-amber-400 flex items-center gap-1.5">
@@ -190,7 +231,7 @@ export const JavaManagerPage: React.FC = () => {
               )}
             </div>
             <span className="text-[10px] text-slate-500 font-mono mt-0.5 block">
-              {hasJavaVersion(21) ? 'Excelente para servidores modernos' : 'Recomendado para Paper/Purpur'}
+              {hasJavaVersion(21) || hasJavaVersion(25) ? 'Excelente para servidores modernos' : 'Recomendado para Paper/Purpur'}
             </span>
           </div>
           <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
@@ -257,7 +298,7 @@ export const JavaManagerPage: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-nebula-accent/20 text-nebula-accent border border-nebula-accent/30">
+                      <span className="px-2 py-0.5 rounded text-xs font-mono tabular-nums font-bold bg-nebula-accent/20 text-nebula-accent border border-nebula-accent/30">
                         Java {rt.majorVersion}
                       </span>
                       <span className="text-xs font-bold text-white font-mono">{rt.vendor}</span>
@@ -273,19 +314,35 @@ export const JavaManagerPage: React.FC = () => {
                   </div>
 
                   <div className="text-[11px] text-slate-400 space-y-1 mb-2 font-mono">
-                    <div className="flex items-center gap-1.5 text-slate-300 truncate" title={rt.path}>
-                      <FolderOpen className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                      <span className="truncate">{rt.path}</span>
+                    <div className="flex items-center justify-between gap-2 bg-nebula-900/70 px-2.5 py-1.5 rounded-lg border border-nebula-850">
+                      <div className="flex items-center gap-1.5 text-slate-300 truncate" title={rt.path}>
+                        <FolderOpen className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span className="truncate">{rt.path}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyPath(rt.id, rt.path)}
+                        className="p-1 rounded hover:bg-nebula-800 text-slate-400 hover:text-white shrink-0 transition-colors"
+                        title="Copiar ruta del ejecutable Java"
+                      >
+                        {copiedPathId === rt.id ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
                     </div>
-                    <div className="text-[10px] text-slate-500">
-                      Versión completa: {rt.versionString}
+                    <div className="text-[10px] text-slate-500 pt-0.5">
+                      Build: {rt.versionString}
                     </div>
                   </div>
                 </div>
 
                 <div className="pt-2 border-t border-nebula-850/60 text-[10px] font-mono text-nebula-cyber flex items-center justify-between">
                   <span>
-                    {rt.majorVersion >= 21
+                    {rt.majorVersion >= 25
+                      ? '✓ Compatible con Minecraft 26.1 - 26.3+'
+                      : rt.majorVersion >= 21
                       ? '✓ Compatible con Minecraft 1.20.5 - 1.21.4+'
                       : rt.majorVersion >= 17
                       ? '✓ Compatible con Minecraft 1.17 - 1.20.4'
@@ -306,7 +363,7 @@ export const JavaManagerPage: React.FC = () => {
             <div>
               <h2 className="text-sm font-bold text-white">Descargas Portables Eclipse Temurin (Adoptium)</h2>
               <p className="text-[11px] text-slate-400">
-                Se instalan de forma aislada en Singularity sin modificar el PATH global de Windows.
+                Se instalan de forma aislada en Singularity sin modificar el PATH global de tu sistema.
               </p>
             </div>
           </div>
@@ -352,7 +409,7 @@ export const JavaManagerPage: React.FC = () => {
                   className={`w-full py-2 px-3 rounded-lg text-xs font-bold font-mono flex items-center justify-center gap-2 transition-all ${
                     isInstalled
                       ? 'bg-nebula-850 text-slate-500 border border-nebula-800 cursor-default'
-                      : 'bg-nebula-cyber/15 hover:bg-nebula-cyber/25 text-nebula-cyber border border-nebula-cyber/40 shadow-sm hover:shadow-nebula-cyber/10'
+                      : 'bg-nebula-cyber/15 hover:bg-nebula-cyber/25 text-nebula-cyber border border-nebula-cyber/40 shadow-sm hover:shadow-nebula-cyber/10 active:scale-[0.99]'
                   }`}
                 >
                   {isDownloading ? (
@@ -378,7 +435,80 @@ export const JavaManagerPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Section 3: Educational Compatibility Matrix */}
+      {/* Section 3: Interactive JVM Flags Generator (Aikar's G1GC & ZGC) */}
+      <div className="bg-nebula-900 border border-nebula-800 rounded-2xl p-5 shadow-md space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-nebula-800/80 pb-3">
+          <div className="flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-nebula-accent" />
+            <div>
+              <h2 className="text-sm font-bold text-white">Generador Táctico de Flags JVM (Aikar's G1GC & ZGC)</h2>
+              <p className="text-[11px] text-slate-400">
+                Calcula los argumentos exactos de Garbage Collector para eliminar tirones de TPS según la memoria asignada.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <button
+              type="button"
+              onClick={() => setFlagProfile('aikar')}
+              className={`px-3 py-1 rounded-lg border transition-colors ${
+                flagProfile === 'aikar'
+                  ? 'bg-nebula-accent/20 text-nebula-accent border-nebula-accent/40 font-bold'
+                  : 'bg-nebula-950 text-slate-400 border-nebula-800 hover:text-white'
+              }`}
+            >
+              Aikar's G1GC
+            </button>
+            <button
+              type="button"
+              onClick={() => setFlagProfile('zgc')}
+              className={`px-3 py-1 rounded-lg border transition-colors ${
+                flagProfile === 'zgc'
+                  ? 'bg-nebula-cyber/20 text-nebula-cyber border-nebula-cyber/40 font-bold'
+                  : 'bg-nebula-950 text-slate-400 border-nebula-800 hover:text-white'
+              }`}
+            >
+              ZGC Generacional (Java 21+)
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <span className="text-slate-400">Memoria RAM:</span>
+            {[4, 6, 8, 12, 16].map((gb) => (
+              <button
+                key={gb}
+                type="button"
+                onClick={() => setFlagRamGb(gb)}
+                className={`px-2.5 py-1 rounded-lg border tabular-nums transition-colors ${
+                  flagRamGb === gb
+                    ? 'bg-nebula-800 text-white border-nebula-accent font-bold'
+                    : 'bg-nebula-950 text-slate-400 border-nebula-850 hover:text-slate-200'
+                }`}
+              >
+                {gb} GB
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleCopyFlags}
+            className="px-3.5 py-1.5 rounded-xl bg-nebula-accent hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all"
+          >
+            {copiedFlags ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            <span>{copiedFlags ? '¡Flags Copiados!' : 'Copiar Línea de Arranque'}</span>
+          </button>
+        </div>
+
+        <div className="p-3 rounded-xl bg-black/90 border border-nebula-850 font-mono text-[11px] text-emerald-400 break-all leading-relaxed select-all">
+          {generatedFlags}
+        </div>
+      </div>
+
+      {/* Section 4: Educational Compatibility Matrix */}
       <div className="p-4 rounded-xl bg-nebula-950/70 border border-nebula-800 text-xs space-y-2">
         <div className="flex items-center gap-2 font-bold text-slate-300">
           <Info className="w-4 h-4 text-nebula-cyber" />
@@ -386,16 +516,16 @@ export const JavaManagerPage: React.FC = () => {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-[11px] font-mono pt-1">
           <div className="p-2.5 rounded-lg bg-nebula-900 border border-nebula-850">
-            <span className="text-emerald-400 font-bold block">Minecraft 1.20.5 - 1.21.4+</span>
+            <span className="text-indigo-400 font-bold block">Minecraft 26.1 - 26.3+</span>
+            <span className="text-slate-400">Java 25 GA (64-bit)</span>
+          </div>
+          <div className="p-2.5 rounded-lg bg-nebula-900 border border-nebula-850">
+            <span className="text-emerald-400 font-bold block">Minecraft 1.20.5 - 1.21.4</span>
             <span className="text-slate-400">Java 21 LTS (64-bit)</span>
           </div>
           <div className="p-2.5 rounded-lg bg-nebula-900 border border-nebula-850">
             <span className="text-cyan-400 font-bold block">Minecraft 1.18 - 1.20.4</span>
             <span className="text-slate-400">Java 17 LTS</span>
-          </div>
-          <div className="p-2.5 rounded-lg bg-nebula-900 border border-nebula-850">
-            <span className="text-purple-400 font-bold block">Minecraft 1.17</span>
-            <span className="text-slate-400">Java 16 o Java 17</span>
           </div>
           <div className="p-2.5 rounded-lg bg-nebula-900 border border-nebula-850">
             <span className="text-amber-400 font-bold block">Minecraft 1.7.10 - 1.16.5</span>
