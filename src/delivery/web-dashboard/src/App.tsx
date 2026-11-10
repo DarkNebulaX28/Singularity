@@ -178,10 +178,15 @@ export const App: React.FC = () => {
       {/* Command Palette (Ctrl+K) */}
       <CommandPalette
         isOpen={isCommandPaletteOpen}
+        onToggle={() => setIsCommandPaletteOpen((prev) => !prev)}
         onClose={() => setIsCommandPaletteOpen(false)}
         onNavigate={(tab) => {
           setCurrentTab(tab);
           setSelectedServer(null);
+        }}
+        onSelectServer={(srv) => {
+          setCurrentTab('servers');
+          setSelectedServer(srv);
         }}
         onOpenCreateWizard={() => {
           setSelectedServer(null);

@@ -21,6 +21,7 @@ import {
   Clock
 } from 'lucide-react';
 import { api } from '../services/api-client.js';
+import { useDialog } from '../context/DialogContext.js';
 import type { ServerInstanceData } from '../components/ServerCard.js';
 import { ConsoleTerminal } from '../components/ConsoleTerminal.js';
 import { PlayerManager, type PlayerData } from '../components/PlayerManager.js';
@@ -42,6 +43,7 @@ export const ServerDetailPage: React.FC<ServerDetailPageProps> = ({
   onBack,
   onNavigateToCatalog
 }) => {
+  const { toast } = useDialog();
   const [server, setServer] = useState<ServerInstanceData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'console' | 'files' | 'properties' | 'content' | 'backups' | 'scheduler'>('console');
@@ -51,6 +53,23 @@ export const ServerDetailPage: React.FC<ServerDetailPageProps> = ({
   const [jarDownloadMsg, setJarDownloadMsg] = useState<string | null>(null);
   const [actionErrorMsg, setActionErrorMsg] = useState<string | null>(null);
   const [copiedSftp, setCopiedSftp] = useState(false);
+  const [copiedAddr, setCopiedAddr] = useState(false);
+
+  const formatUptime = (seconds: number): string => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const copyServerAddress = () => {
+    if (!server) return;
+    const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+    navigator.clipboard.writeText(`${host}:${server.port}`);
+    setCopiedAddr(true);
+    toast(`Dirección ${host}:${server.port} copiada`, 'success');
+    setTimeout(() => setCopiedAddr(false), 2000);
+  };
   const [players, setPlayers] = useState<PlayerData[]>([]);
   const [metrics, setMetrics] = useState<{ cpuPercent: number; memoryBytes: number; uptimeSeconds: number } | null>(null);
 
@@ -287,18 +306,26 @@ export const ServerDetailPage: React.FC<ServerDetailPageProps> = ({
                 {statusConfig.label}
               </span>
               {isOnline && (
-                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono tabular-nums font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                   <Activity className="w-3 h-3 text-emerald-400" />
                   {metrics
-                    ? `CPU ${metrics.cpuPercent.toFixed(1)}% • RAM ${Math.round(metrics.memoryBytes / (1024 * 1024))} / ${server.memoryMb} MB`
+                    ? `CPU ${metrics.cpuPercent.toFixed(1)}% • RAM ${Math.round(metrics.memoryBytes / (1024 * 1024))} / ${server.memoryMb} MB • ⏱ ${formatUptime(metrics.uptimeSeconds)}`
                     : '20.0 TPS'}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-0.5 text-xs font-mono text-slate-400">
+            <div className="flex items-center gap-2 mt-0.5 text-xs font-mono tabular-nums text-slate-400">
               <span className="text-nebula-cyber font-semibold">{server.loader.toUpperCase()} {server.gameVersion}</span>
               <span>&bull;</span>
-              <span>Puerto: {server.port}</span>
+              <button
+                type="button"
+                onClick={copyServerAddress}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-nebula-900 hover:bg-nebula-800 border border-nebula-800 text-[11px] text-slate-300 hover:text-nebula-cyber transition-colors"
+                title="Copiar dirección IP:Puerto del servidor"
+              >
+                <span>Puerto: {server.port}</span>
+                {copiedAddr ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              </button>
               <span>&bull;</span>
               <span>RAM: {server.memoryMb} MB</span>
               {server.pid && <span>&bull; PID: {server.pid}</span>}

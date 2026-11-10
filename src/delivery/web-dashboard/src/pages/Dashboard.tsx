@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Server, Plus, HardDrive, Activity, RotateCw, Search } from 'lucide-react';
+import { Server, Plus, HardDrive, Activity, RotateCw, Search, Copy, Check } from 'lucide-react';
 import { api } from '../services/api-client.js';
+import { useDialog } from '../context/DialogContext.js';
 import { ServerCard, type ServerInstanceData } from '../components/ServerCard.js';
 import { CreateServerWizard } from './CreateServerWizard.js';
 
@@ -17,11 +18,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
   isWizardOpen,
   onCloseWizard
 }) => {
+  const { toast } = useDialog();
   const [servers, setServers] = useState<ServerInstanceData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>('all');
+  const [copiedSftp, setCopiedSftp] = useState(false);
+
+  const handleCopySftp = () => {
+    const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+    navigator.clipboard.writeText(`sftp://admin@${host}:2022`);
+    setCopiedSftp(true);
+    toast('URI SFTP (:2022) copiada al portapapeles', 'success');
+    setTimeout(() => setCopiedSftp(false), 2000);
+  };
 
   const fetchServers = useCallback(async (quiet = false) => {
     if (!quiet) setIsRefreshing(true);
@@ -143,8 +154,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="bg-nebula-900/90 border border-nebula-800 rounded-xl p-4 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-[11px] font-medium text-slate-400">Servicio SFTP Embebido</span>
-            <div className="text-base font-bold font-mono text-emerald-400 mt-1">
-              Activo :2022
+            <div className="text-base font-bold font-mono tabular-nums text-emerald-400 mt-1 flex items-center gap-2">
+              <span>Activo :2022</span>
+              <button
+                type="button"
+                onClick={handleCopySftp}
+                className="px-2 py-0.5 rounded bg-nebula-950 hover:bg-nebula-800 border border-nebula-800 text-[10px] font-mono text-nebula-cyber flex items-center gap-1 transition-colors"
+                title="Copiar URI SFTP para Antigravity IDE o VS Code"
+              >
+                {copiedSftp ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                <span>{copiedSftp ? 'Copiado' : 'Copiar URI'}</span>
+              </button>
             </div>
             <span className="text-[10px] text-slate-500 mt-0.5 block">
               Listo para Antigravity IDE / VS Code

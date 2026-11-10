@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { MotdDesigner } from './MotdDesigner';
 import { api } from '../services/api-client.js';
+import { useDialog } from '../context/DialogContext.js';
 
 export interface PropertiesEditorProps {
   serverId: string;
@@ -258,6 +259,7 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
   serverName,
   onSaved
 }) => {
+  const { toast } = useDialog();
   const [properties, setProperties] = useState<Record<string, PropertyValue>>({});
   const [initialProperties, setInitialProperties] = useState<Record<string, PropertyValue>>({});
   const [loading, setLoading] = useState(true);
@@ -337,15 +339,38 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
 
       setInitialProperties(properties);
       setSuccessMessage('¡Archivo server.properties guardado y sincronizado con éxito!');
+      toast('server.properties guardado', 'success');
       onSaved?.();
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al guardar propiedades';
       setError(msg);
+      toast(msg, 'error');
     } finally {
       setSaving(false);
     }
   };
+
+  const applyPreset = (name: string, patch: Record<string, PropertyValue>) => {
+    setProperties((prev) => ({
+      ...prev,
+      ...patch
+    }));
+    toast(`Preset "${name}" aplicado (Pulsa Guardar o Ctrl+S)`, 'info');
+  };
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (hasUnsavedChanges && !saving) {
+          handleSave();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [hasUnsavedChanges, saving, properties]);
 
   const handleReset = () => {
     setProperties(initialProperties);
@@ -425,14 +450,66 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
           <button
             onClick={handleSave}
             disabled={saving || !hasUnsavedChanges}
-            className="px-4 py-2 rounded-lg bg-nebula-accent hover:bg-emerald-600 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-nebula-accent/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-lg bg-nebula-accent hover:bg-emerald-400 active:scale-[0.98] text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-nebula-accent/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Guardar server.properties (Ctrl+S)"
           >
             {saving ? (
               <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
             ) : (
               <Save className="w-4 h-4" />
             )}
-            <span>{saving ? 'Guardando...' : 'Guardar Cambios'}</span>
+            <span>{saving ? 'Guardando...' : 'Guardar (Ctrl+S)'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 1-Click Tactical Presets Bar */}
+      <div className="p-3 rounded-xl bg-nebula-950/90 border border-nebula-850 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span className="text-[11px] font-mono text-slate-400 font-semibold">
+          Presets Tácticos 1-Clic:
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              applyPreset('Optimizar Anti-Lag SMP', {
+                'view-distance': 8,
+                'simulation-distance': 6,
+                'network-compression-threshold': 256,
+                'sync-chunk-writes': false
+              })
+            }
+            className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono text-[11px] transition-all active:scale-[0.98]"
+          >
+            ⚡ Optimizar Anti-Lag (SMP)
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              applyPreset('Servidor Privado Seguro', {
+                'online-mode': true,
+                'white-list': true,
+                'enforce-whitelist': true,
+                'spawn-protection': 16
+              })
+            }
+            className="px-2.5 py-1 rounded-lg bg-nebula-cyber/10 hover:bg-nebula-cyber/20 text-nebula-cyber border border-nebula-cyber/30 font-mono text-[11px] transition-all active:scale-[0.98]"
+          >
+            🛡️ Servidor Privado Seguro
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              applyPreset('Mundo Creativo', {
+                gamemode: 'creative',
+                difficulty: 'peaceful',
+                pvp: false,
+                'allow-flight': true
+              })
+            }
+            className="px-2.5 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 font-mono text-[11px] transition-all active:scale-[0.98]"
+          >
+            🎨 Mundo Creativo / Builders
           </button>
         </div>
       </div>

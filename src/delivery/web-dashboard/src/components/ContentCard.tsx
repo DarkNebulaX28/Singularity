@@ -33,23 +33,33 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   };
 
   const isClientMod = isClientOnlyMod(item.slug) || isClientOnlyMod(item.title);
-  const isPlugin =
+  const hasPluginSupport =
     item.projectType === 'plugin' ||
-    (item.projectType === 'mod' &&
-      item.categories?.some((c) => ['spigot', 'paper', 'purpur', 'bukkit'].includes(c.toLowerCase())));
+    Boolean(item.categories?.some((c) => ['spigot', 'paper', 'purpur', 'bukkit', 'folia'].includes(c.toLowerCase())));
+  const hasModSupport =
+    item.projectType === 'mod' &&
+    Boolean(item.categories?.some((c) => ['fabric', 'forge', 'neoforge', 'quilt'].includes(c.toLowerCase())));
+  const isDualPluginAndMod = hasPluginSupport && hasModSupport;
+  const isPlugin = item.projectType === 'plugin' || (hasPluginSupport && !hasModSupport);
 
   const effectiveType = isPlugin ? 'plugin' : item.projectType;
 
-  const typeConfig = {
-    mod: { label: 'MOD', icon: Box, color: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },
-    plugin: { label: 'PLUGIN', icon: Package, color: 'text-nebula-cyber bg-nebula-cyber/10 border-nebula-cyber/30' },
-    modpack: { label: 'MODPACK / PACK', icon: Layers, color: 'text-purple-400 bg-purple-500/10 border-purple-500/30' },
-    datapack: { label: 'DATAPACK', icon: Database, color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' }
-  }[effectiveType] ?? {
-    label: effectiveType.toUpperCase(),
-    icon: Box,
-    color: 'text-slate-400 bg-slate-800 border-slate-700'
-  };
+  const typeConfig = isDualPluginAndMod
+    ? {
+        label: item.projectType === 'plugin' ? 'PLUGIN + MOD' : 'MOD + PLUGIN',
+        icon: Package,
+        color: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/40'
+      }
+    : {
+        mod: { label: 'MOD', icon: Box, color: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },
+        plugin: { label: 'PLUGIN', icon: Package, color: 'text-nebula-cyber bg-nebula-cyber/10 border-nebula-cyber/30' },
+        modpack: { label: 'MODPACK / PACK', icon: Layers, color: 'text-purple-400 bg-purple-500/10 border-purple-500/30' },
+        datapack: { label: 'DATAPACK', icon: Database, color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' }
+      }[effectiveType] ?? {
+        label: effectiveType.toUpperCase(),
+        icon: Box,
+        color: 'text-slate-400 bg-slate-800 border-slate-700'
+      };
 
   const TypeIcon = typeConfig.icon;
 
@@ -116,15 +126,18 @@ export const ContentCard: React.FC<ContentCardProps> = ({
 
       {/* Footer: Downloads Counter + 1-Click Install Button */}
       <div className="pt-3 border-t border-nebula-850 flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
+        <div className="flex items-center gap-1.5 text-[10px] font-mono tabular-nums text-slate-400">
           <Download className="w-3 h-3 text-slate-500" />
-          <span>{formatDownloads(item.downloads)} descargas</span>
+          <span>{formatDownloads(item.downloads)}</span>
+          <span className="text-[9px] px-1.5 py-0.2 rounded bg-nebula-950 border border-nebula-800 text-slate-500 uppercase">
+            {item.providerId}
+          </span>
         </div>
 
         <button
           onClick={() => onInstall(item)}
           disabled={isInstalled}
-          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 shadow-sm ${
+          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all active:scale-[0.98] flex items-center gap-1.5 shadow-sm ${
             isInstalled
               ? 'bg-nebula-850 text-slate-500 border border-nebula-700 cursor-default'
               : item.projectType === 'modpack'
