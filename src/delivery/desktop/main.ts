@@ -183,7 +183,9 @@ function createMainWindow(startHidden: boolean = false): BrowserWindow {
 
       if (!isAllowedOrigin) {
         event.preventDefault();
-        shell.openExternal(navigationUrl);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+          shell.openExternal(navigationUrl);
+        }
       }
     } catch {
       event.preventDefault();

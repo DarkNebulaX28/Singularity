@@ -33,8 +33,8 @@ export class IdeBridge {
       return this.defaultServersDir;
     }
 
-    if (serverIdOrPath.includes('\0')) {
-      throw new Error('Acceso denegado: Carácter nulo detectado.');
+    if (serverIdOrPath.includes('\0') || /[&|;`$<>"]/g.test(serverIdOrPath)) {
+      throw new Error('Acceso denegado: Caracteres no permitidos en la ruta.');
     }
 
     const cleanRelative = serverIdOrPath.trim().replace(/^(\/|\\)+/, '');
@@ -295,7 +295,10 @@ Este servidor de Minecraft está alojado y corriendo en tu VPS en la nube:
     return new Promise((resolve) => {
       try {
         const isWindows = process.platform === 'win32';
-        const proc = spawn(command, args, {
+        const safeArgs = isWindows
+          ? args.map((a) => `"${a.replace(/"/g, '')}"`)
+          : args;
+        const proc = spawn(command, safeArgs, {
           detached: true,
           stdio: 'ignore',
           shell: isWindows,
