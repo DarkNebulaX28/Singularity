@@ -6,11 +6,12 @@ export default {
     extend: {
       colors: {
         nebula: {
-          950: '#090b10',
-          900: '#0f141c',
-          850: '#151b26',
-          800: '#1c2433',
-          700: '#2c374d',
+          950: '#07090e',
+          900: '#0c1017',
+          850: '#121824',
+          800: '#1a2232',
+          750: '#232e42',
+          700: '#2e3b52',
           accent: '#10b981', // Emerald Mission Control
           cyber: '#06b6d4',  // Cyan telemetry
           warning: '#f59e0b',// Amber alert
@@ -19,10 +20,13 @@ export default {
         }
       },
       fontFamily: {
-        mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', 'monospace'],
+        mono: ['JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif']
+      },
+      transitionTimingFunction: {
+        'out-expo': 'cubic-bezier(0.22, 1, 0.36, 1)'
       }
-    },
+    }
   },
-  plugins: [],
+  plugins: []
 };
