@@ -179,7 +179,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <span className="text-[11px] text-nebula-accent font-semibold">NEBULAX STUDIO</span>
           </div>
           <span className="hidden sm:inline-block px-2 py-0.5 rounded bg-nebula-900 border border-nebula-800 text-[10px] text-slate-400 tabular-nums">
-            BUILD v0.1.1-ALPHA
+            BUILD v0.1.2-ALPHA
           </span>
           {isElectronApp && (
             <span className="px-2 py-0.5 rounded bg-nebula-cyber/10 border border-nebula-cyber/30 text-[10px] text-nebula-cyber font-semibold">

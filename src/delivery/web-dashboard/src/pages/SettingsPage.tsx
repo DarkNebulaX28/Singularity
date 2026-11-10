@@ -600,7 +600,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenProfileModal }
               <img src="/favicon.svg" alt="Singularity" className="w-5 h-5 object-contain" />
               <span className="text-xs font-bold text-white tracking-wider font-mono">SINGULARITY</span>
               <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-nebula-800 text-nebula-accent border border-nebula-accent/30">
-                v0.1.0-alpha
+                v0.1.2-alpha
               </span>
             </div>
             <p className="text-[11px] text-slate-400 leading-relaxed">

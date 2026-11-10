@@ -77,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, serve
                 <span className="font-bold tracking-tight text-slate-100 flex items-center gap-1.5 text-sm truncate">
                   Singularity
                   <span className="text-[9px] font-mono font-semibold px-1 py-0.2 rounded bg-nebula-800 text-nebula-accent border border-nebula-accent/30">
-                    v0.1.1
+                    v0.1.2
                   </span>
                 </span>
                 <span className="text-[9px] text-slate-500 font-mono tracking-widest">NEBULAX STUDIO</span>
