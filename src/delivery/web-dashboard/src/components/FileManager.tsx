@@ -40,6 +40,7 @@ import {
   LayoutList
 } from 'lucide-react';
 import { api } from '../services/api-client.js';
+import { useDialog } from '../context/DialogContext.js';
 
 // Configure Monaco to use the locally bundled VS Code engine (100% offline-ready for Desktop & Web)
 loader.config({ monaco });
@@ -174,6 +175,7 @@ function validateFileSyntax(content: string, ext: string): SyntaxDiagnostic {
 }
 
 export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
+  const { confirm } = useDialog();
   const [currentPath, setCurrentPath] = useState<string>('');
   const [files, setFiles] = useState<FileItemData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -431,11 +433,17 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
     }
   };
 
-  const handleCloseTab = (pathToClose: string, e?: React.MouseEvent) => {
+  const handleCloseTab = async (pathToClose: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const tab = openTabs.find((t) => t.path === pathToClose);
     if (tab && tab.content !== tab.originalContent) {
-      if (!confirm(`El archivo "${tab.name}" tiene cambios sin guardar. ¿Deseas cerrarlo de todos modos?`)) {
+      const ok = await confirm({
+        title: 'Cambios sin Guardar',
+        message: `El archivo "${tab.name}" tiene cambios sin guardar. ¿Deseas cerrarlo y descartar los cambios?`,
+        confirmLabel: 'Descartar y Cerrar',
+        variant: 'warning'
+      });
+      if (!ok) {
         return;
       }
     }
@@ -460,9 +468,12 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
 
     const diag = validateFileSyntax(activeTab.content, activeTab.extension);
     if (!diag.valid) {
-      const proceed = confirm(
-        `Se detectó un problema de sintaxis en "${activeTab.name}" (Línea ${diag.line || 1}):\n\n${diag.message}\n\n¿Deseas guardarlo de todos modos?`
-      );
+      const proceed = await confirm({
+        title: 'Advertencia de Sintaxis Detectada',
+        message: `Se detectó un problema de sintaxis en "${activeTab.name}" (Línea ${diag.line || 1}):\n\n${diag.message}\n\n¿Deseas guardar el archivo de todos modos?`,
+        confirmLabel: 'Guardar de Todos Modos',
+        variant: 'warning'
+      });
       if (!proceed) return;
     }
 
@@ -685,9 +696,15 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
     const isDir = item.isDirectory;
     const confirmMsg = isDir
       ? `¿Eliminar la carpeta "${item.name}" y todo su contenido? Esta acción no se puede deshacer.`
-      : `¿Eliminar el archivo "${item.name}"?`;
+      : `¿Eliminar el archivo "${item.name}" de forma permanente?`;
 
-    if (!confirm(confirmMsg)) return;
+    const ok = await confirm({
+      title: isDir ? 'Eliminar Carpeta' : 'Eliminar Archivo',
+      message: confirmMsg,
+      confirmLabel: 'Eliminar',
+      variant: 'danger'
+    });
+    if (!ok) return;
 
     try {
       await api.delete(`/servers/${serverId}/files?path=${encodeURIComponent(item.relativePath)}`);
@@ -704,7 +721,13 @@ export const FileManager: React.FC<FileManagerProps> = ({ serverId }) => {
   // Delete multiple selected items
   const handleDeleteSelected = async () => {
     if (selectedPaths.size === 0) return;
-    if (!confirm(`¿Eliminar los ${selectedPaths.size} elemento(s) seleccionados?`)) return;
+    const ok = await confirm({
+      title: 'Eliminar Elementos Seleccionados',
+      message: `¿Eliminar los ${selectedPaths.size} elemento(s) seleccionados del servidor? Esta acción no se puede deshacer.`,
+      confirmLabel: `Eliminar (${selectedPaths.size})`,
+      variant: 'danger'
+    });
+    if (!ok) return;
 
     try {
       for (const relPath of selectedPaths) {

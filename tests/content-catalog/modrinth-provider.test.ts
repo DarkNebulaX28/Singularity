@@ -109,4 +109,83 @@ describe('ModrinthProvider', () => {
       'https://cdn.modrinth.com/data/P7dR8mSH/versions/ver_01/fabric-api-0.92.0.jar'
     );
   });
+
+  it('should resolve dual mod+plugin projects like Chunky as plugin and preserve Bukkit/Paper loader filter on fallback', async () => {
+    // 1. Test search with projectType: 'plugin'
+    const mockSearchResponse = {
+      hits: [
+        {
+          project_id: 'fALzjamp',
+          slug: 'chunky',
+          title: 'Chunky',
+          description: 'Pre-generates chunks, quickly, efficiently, and safely',
+          categories: ['bukkit', 'fabric', 'folia', 'forge', 'neoforge', 'paper', 'purpur', 'quilt', 'spigot'],
+          client_side: 'optional',
+          server_side: 'required',
+          project_type: 'mod', // Modrinth stores dual projects as project_type: "mod"
+          downloads: 12000000,
+          icon_url: 'https://cdn.modrinth.com/data/fALzjamp/icon.png',
+          author: 'pop4959'
+        }
+      ],
+      total_hits: 1
+    };
+
+    const fetchMock = vi.fn()
+      // Call 1: search({ query: 'chunky', projectType: 'plugin' })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockSearchResponse
+      } as Response)
+      // Call 2: getVersions('fALzjamp', '26.3', 'paper') -> exact version '26.3' returns empty
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => []
+      } as Response)
+      // Call 3: Fallback 1 preserves loaders=['paper','purpur','spigot','bukkit','folia'] and returns Chunky-Bukkit
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 'ver_chunky_bukkit',
+            project_id: 'fALzjamp',
+            name: 'Chunky 1.4.27 (Bukkit/Paper)',
+            version_number: '1.4.27',
+            game_versions: ['1.21', '1.21.1', '1.21.4'],
+            loaders: ['bukkit', 'spigot', 'paper', 'purpur', 'folia'],
+            files: [
+              {
+                url: 'https://cdn.modrinth.com/data/fALzjamp/versions/ver_chunky_bukkit/Chunky-Bukkit-1.4.27.jar',
+                filename: 'Chunky-Bukkit-1.4.27.jar',
+                primary: true,
+                size: 420000
+              }
+            ],
+            dependencies: []
+          }
+        ]
+      } as Response);
+
+    globalThis.fetch = fetchMock;
+
+    const searchResult = await provider.search({
+      query: 'chunky',
+      projectType: 'plugin'
+    });
+
+    expect(searchResult.items.length).toBe(1);
+    expect(searchResult.items[0]?.slug).toBe('chunky');
+    expect(searchResult.items[0]?.projectType).toBe('plugin');
+
+    const versions = await provider.getVersions('fALzjamp', '26.3', 'paper');
+    expect(versions.length).toBe(1);
+    expect(versions[0]?.fileName).toBe('Chunky-Bukkit-1.4.27.jar');
+    expect(versions[0]?.loaders).toContain('paper');
+
+    // Verify Fallback 1 URL still included the plugin loaders parameter
+    const fallbackCallUrl = String(fetchMock.mock.calls[2]?.[0] || '');
+    expect(fallbackCallUrl).toContain('loaders=');
+    expect(fallbackCallUrl).toContain('bukkit');
+    expect(fallbackCallUrl).not.toContain('game_versions=');
+  });
 });

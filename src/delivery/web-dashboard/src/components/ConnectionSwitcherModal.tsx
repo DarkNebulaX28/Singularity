@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { ServerConnectionProfile } from '../types/desktop.js';
+import { useDialog } from '../context/DialogContext.js';
 import {
   Cloud,
   Monitor,
@@ -38,6 +39,7 @@ export const ConnectionSwitcherModal: React.FC<ConnectionSwitcherModalProps> = (
   onClose,
   onSwitched
 }) => {
+  const { confirm } = useDialog();
   const [profiles, setProfiles] = useState<ServerConnectionProfile[]>([]);
   const [activeProfile, setActiveProfile] = useState<ServerConnectionProfile | null>(null);
   const [latencies, setLatencies] = useState<LatencyState>({});
@@ -236,7 +238,13 @@ export const ConnectionSwitcherModal: React.FC<ConnectionSwitcherModalProps> = (
       return;
     }
 
-    if (!confirm('¿Estás seguro de eliminar este perfil de conexión?')) return;
+    const ok = await confirm({
+      title: 'Eliminar Perfil de Conexión',
+      message: '¿Estás seguro de eliminar este perfil de conexión remota?',
+      confirmLabel: 'Eliminar Perfil',
+      variant: 'danger'
+    });
+    if (!ok) return;
 
     try {
       if (isElectron && window.singularityDesktop?.deleteConnection) {

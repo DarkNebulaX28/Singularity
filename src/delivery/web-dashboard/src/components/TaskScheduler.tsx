@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useDialog } from '../context/DialogContext.js';
 import {
   Clock,
   Play,
@@ -43,6 +44,7 @@ interface TaskSchedulerProps {
 }
 
 export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
+  const { confirm } = useDialog();
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -126,7 +128,13 @@ export const TaskScheduler: React.FC<TaskSchedulerProps> = ({ serverId }) => {
   };
 
   const handleDelete = async (taskId: string) => {
-    if (!window.confirm('¿Estás seguro de que deseas eliminar esta tarea programada?')) return;
+    const ok = await confirm({
+      title: 'Eliminar Tarea Programada',
+      message: '¿Estás seguro de que deseas eliminar esta tarea automatizada del cronograma?',
+      confirmLabel: 'Eliminar Tarea',
+      variant: 'danger'
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'DELETE',

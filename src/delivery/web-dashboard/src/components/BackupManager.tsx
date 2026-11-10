@@ -13,6 +13,7 @@ import {
   FileArchive
 } from 'lucide-react';
 import { api } from '../services/api-client.js';
+import { useDialog } from '../context/DialogContext.js';
 
 export interface BackupData {
   id: string;
@@ -30,6 +31,7 @@ interface BackupManagerProps {
 }
 
 export const BackupManager: React.FC<BackupManagerProps> = ({ serverId, isOnline }) => {
+  const { confirm, alert } = useDialog();
   const [backups, setBackups] = useState<BackupData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -100,7 +102,13 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ serverId, isOnline
   };
 
   const handleDeleteBackup = async (backup: BackupData) => {
-    if (!confirm(`¿Eliminar la copia de seguridad "${backup.filename}"? Esta acción liberará espacio pero no se puede deshacer.`)) {
+    const ok = await confirm({
+      title: 'Eliminar Copia de Seguridad',
+      message: `¿Eliminar la copia de seguridad "${backup.filename}"? Esta acción liberará espacio en disco pero no se puede deshacer.`,
+      confirmLabel: 'Eliminar Copia',
+      variant: 'danger'
+    });
+    if (!ok) {
       return;
     }
 
@@ -108,7 +116,11 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ serverId, isOnline
       await api.delete(`/servers/${serverId}/backups/${backup.id}`);
       await fetchBackups();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Error al eliminar copia');
+      await alert({
+        title: 'Error al Eliminar Copia',
+        message: err instanceof Error ? err.message : 'Error al eliminar copia',
+        variant: 'error'
+      });
     }
   };
 

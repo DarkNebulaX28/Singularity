@@ -51,6 +51,9 @@ interface ModrinthVersionResponse {
   dependencies: ModrinthVersionDependency[];
 }
 
+const PLUGIN_LOADERS = ['paper', 'purpur', 'spigot', 'bukkit', 'folia', 'bungeecord', 'velocity'];
+const MOD_LOADERS = ['fabric', 'forge', 'neoforge', 'quilt'];
+
 export class ModrinthProvider implements IContentProvider {
   readonly id = 'modrinth';
   readonly name = 'Modrinth';
@@ -67,12 +70,41 @@ export class ModrinthProvider implements IContentProvider {
     // Construct facets
     const facets: string[][] = [];
 
-    if (query.projectType) {
+    if (query.projectType === 'plugin') {
+      // On Modrinth, plugins (including dual mod/plugin projects like Chunky, WorldEdit, LuckPerms)
+      // are identified by their server plugin loader categories.
+      facets.push([
+        'categories:paper',
+        'categories:spigot',
+        'categories:bukkit',
+        'categories:purpur',
+        'categories:folia'
+      ]);
+    } else if (query.projectType === 'mod') {
+      facets.push(['project_type:mod']);
+      facets.push([
+        'categories:fabric',
+        'categories:forge',
+        'categories:neoforge',
+        'categories:quilt'
+      ]);
+    } else if (query.projectType) {
       facets.push([`project_type:${query.projectType}`]);
     }
 
     if (query.loader) {
-      facets.push([`categories:${query.loader.toLowerCase()}`]);
+      const cleanLoader = query.loader.toLowerCase();
+      if (PLUGIN_LOADERS.includes(cleanLoader)) {
+        facets.push([
+          'categories:paper',
+          'categories:spigot',
+          'categories:bukkit',
+          'categories:purpur',
+          'categories:folia'
+        ]);
+      } else {
+        facets.push([`categories:${cleanLoader}`]);
+      }
     }
 
     if (query.gameVersion) {
@@ -95,6 +127,10 @@ export class ModrinthProvider implements IContentProvider {
 
     const data = (await res.json()) as { hits: ModrinthSearchHit[]; total_hits: number };
 
+    const isRequestingPlugin =
+      query.projectType === 'plugin' ||
+      Boolean(query.loader && PLUGIN_LOADERS.includes(query.loader.toLowerCase()));
+
     const items: CatalogItem[] = data.hits
       .filter((hit) => {
         // Exclude client-only mods from dedicated server catalog
@@ -103,17 +139,17 @@ export class ModrinthProvider implements IContentProvider {
         return true;
       })
       .map((hit) => {
-        // Modrinth classifies plugins under 'mod' with categories like 'spigot', 'paper', 'bukkit'
         const isPluginCategory = hit.categories?.some((c) =>
-          ['spigot', 'paper', 'purpur', 'bukkit', 'bungeecord', 'velocity'].includes(c.toLowerCase())
+          PLUGIN_LOADERS.includes(c.toLowerCase())
+        );
+        const isModCategory = hit.categories?.some((c) =>
+          MOD_LOADERS.includes(c.toLowerCase())
         );
 
         let effectiveProjectType = (hit.project_type ?? 'mod') as ProjectType;
-        if (
-          effectiveProjectType === 'mod' &&
-          isPluginCategory &&
-          !hit.categories?.some((c) => ['fabric', 'forge', 'neoforge', 'quilt'].includes(c.toLowerCase()))
-        ) {
+        if (isRequestingPlugin && isPluginCategory) {
+          effectiveProjectType = 'plugin';
+        } else if (effectiveProjectType === 'mod' && isPluginCategory && !isModCategory) {
           effectiveProjectType = 'plugin';
         }
 
@@ -144,12 +180,23 @@ export class ModrinthProvider implements IContentProvider {
     gameVersion?: string,
     loader?: string
   ): Promise<ContentVersion[]> {
+    const cleanLoader = loader?.toLowerCase().trim();
+    const isPluginLoader = Boolean(cleanLoader && PLUGIN_LOADERS.includes(cleanLoader));
+    const isModLoader = Boolean(cleanLoader && MOD_LOADERS.includes(cleanLoader));
+
+    // Expand plugin loaders so a Paper/Purpur/Spigot server matches Bukkit/Spigot/Paper plugin JARs (e.g. Chunky-Bukkit)
+    const loaderFilterList = isPluginLoader
+      ? ['paper', 'purpur', 'spigot', 'bukkit', 'folia']
+      : cleanLoader
+      ? [cleanLoader]
+      : undefined;
+
     const params = new URLSearchParams();
     if (gameVersion) {
       params.set('game_versions', JSON.stringify([gameVersion]));
     }
-    if (loader) {
-      params.set('loaders', JSON.stringify([loader.toLowerCase()]));
+    if (loaderFilterList) {
+      params.set('loaders', JSON.stringify(loaderFilterList));
     }
 
     const url = `${this.baseUrl}/project/${encodeURIComponent(projectId)}/version?${params.toString()}`;
@@ -165,8 +212,24 @@ export class ModrinthProvider implements IContentProvider {
 
     let versions = (await res.json()) as ModrinthVersionResponse[];
 
-    // Fallback: if filtered query returned no versions, fetch all project versions
-    if (versions.length === 0 && (gameVersion || loader)) {
+    // Fallback 1: If exact gameVersion + loader returned 0 results, keep the loader filter and relax only gameVersion!
+    // This ensures a Paper/Spigot server NEVER falls back to downloading a Fabric/NeoForge mod JAR.
+    if (versions.length === 0 && gameVersion && loaderFilterList) {
+      const loaderOnlyParams = new URLSearchParams();
+      loaderOnlyParams.set('loaders', JSON.stringify(loaderFilterList));
+      const loaderFallbackUrl = `${this.baseUrl}/project/${encodeURIComponent(projectId)}/version?${loaderOnlyParams.toString()}`;
+      const loaderFallbackRes = await fetch(loaderFallbackUrl, {
+        headers: {
+          'User-Agent': 'NebulaX-Singularity/0.1.0 (contact@nebulax.dev)'
+        }
+      });
+      if (loaderFallbackRes.ok) {
+        versions = (await loaderFallbackRes.json()) as ModrinthVersionResponse[];
+      }
+    }
+
+    // Fallback 2: Only if still empty (e.g., datapacks or universal packages), fetch all versions and filter incompatible loaders
+    if (versions.length === 0 && (gameVersion || loaderFilterList)) {
       const fallbackUrl = `${this.baseUrl}/project/${encodeURIComponent(projectId)}/version`;
       const fallbackRes = await fetch(fallbackUrl, {
         headers: {
@@ -174,7 +237,20 @@ export class ModrinthProvider implements IContentProvider {
         }
       });
       if (fallbackRes.ok) {
-        versions = (await fallbackRes.json()) as ModrinthVersionResponse[];
+        const allVersions = (await fallbackRes.json()) as ModrinthVersionResponse[];
+        if (isPluginLoader) {
+          const pluginCompatible = allVersions.filter((v) =>
+            v.loaders?.some((l) => PLUGIN_LOADERS.includes(l.toLowerCase()))
+          );
+          versions = pluginCompatible.length > 0 ? pluginCompatible : allVersions;
+        } else if (isModLoader && cleanLoader) {
+          const modCompatible = allVersions.filter((v) =>
+            v.loaders?.some((l) => l.toLowerCase() === cleanLoader)
+          );
+          versions = modCompatible.length > 0 ? modCompatible : allVersions;
+        } else {
+          versions = allVersions;
+        }
       }
     }
 
@@ -200,8 +276,8 @@ export class ModrinthProvider implements IContentProvider {
         downloadUrl: primaryFile?.url ?? '',
         size: primaryFile?.size ?? 0,
         hashes: {
-          sha1: primaryFile?.hashes.sha1,
-          sha512: primaryFile?.hashes.sha512
+          sha1: primaryFile?.hashes?.sha1,
+          sha512: primaryFile?.hashes?.sha512
         },
         dependencies
       };

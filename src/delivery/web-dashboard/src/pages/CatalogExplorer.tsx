@@ -11,6 +11,7 @@ interface SearchResponse {
 }
 
 const POPULAR_MODS = [
+  { name: 'Chunky', type: 'Pre-generador' },
   { name: 'Lithium', type: 'Físicas Servidor' },
   { name: 'FerriteCore', type: 'Memoria RAM' },
   { name: 'Spark', type: 'Profiler / Anti-lag' },
@@ -20,11 +21,25 @@ const POPULAR_MODS = [
   { name: 'WorldEdit', type: 'Construcción' }
 ];
 
-export const CatalogExplorer: React.FC = () => {
+interface CatalogExplorerProps {
+  defaultServerId?: string;
+  defaultProjectType?: 'all' | 'mod' | 'plugin' | 'modpack' | 'datapack';
+}
+
+export const CatalogExplorer: React.FC<CatalogExplorerProps> = ({
+  defaultServerId,
+  defaultProjectType = 'all'
+}) => {
   const [query, setQuery] = useState('');
-  const [projectType, setProjectType] = useState<'all' | 'mod' | 'plugin' | 'modpack' | 'datapack'>('all');
+  const [projectType, setProjectType] = useState<'all' | 'mod' | 'plugin' | 'modpack' | 'datapack'>(defaultProjectType);
   const [provider, setProvider] = useState<'modrinth' | 'curseforge' | 'papermc'>('modrinth');
   const [providersStatus, setProvidersStatus] = useState<{ id: string; name: string; isEnabled: boolean }[]>([]);
+
+  useEffect(() => {
+    if (defaultProjectType) {
+      setProjectType(defaultProjectType);
+    }
+  }, [defaultProjectType]);
 
   const [items, setItems] = useState<CatalogItemData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -343,13 +358,17 @@ export const CatalogExplorer: React.FC = () => {
 
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {visibleItems.map((item) => (
-              <ContentCard
-                key={`${item.providerId}-${item.id}`}
-                item={item}
-                onInstall={(it) => setItemToInstall(it)}
-              />
-            ))}
+            {visibleItems.map((item) => {
+              const effectiveItem: CatalogItemData =
+                projectType === 'plugin' ? { ...item, projectType: 'plugin' } : item;
+              return (
+                <ContentCard
+                  key={`${item.providerId}-${item.id}`}
+                  item={effectiveItem}
+                  onInstall={(it) => setItemToInstall(it)}
+                />
+              );
+            })}
           </div>
         );
       })()}
@@ -357,6 +376,7 @@ export const CatalogExplorer: React.FC = () => {
       {/* 1-Click Install Modal */}
       <ContentInstallModal
         item={itemToInstall}
+        defaultServerId={defaultServerId}
         onClose={() => setItemToInstall(null)}
         onSuccess={() => {
           // Success callback

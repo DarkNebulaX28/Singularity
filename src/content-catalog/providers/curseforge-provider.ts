@@ -210,7 +210,7 @@ export class CurseForgeProvider implements IContentProvider {
   async getVersions(
     projectId: string,
     gameVersion?: string,
-    _loader?: string
+    loader?: string
   ): Promise<ContentVersion[]> {
     const apiKey = this.cleanApiKey;
     if (!apiKey) {
@@ -251,6 +251,26 @@ export class CurseForgeProvider implements IContentProvider {
     // Sort descending by file id (latest uploads first)
     files.sort((a, b) => b.id - a.id);
 
+    // Optional loader filter with graceful fallback
+    if (loader) {
+      const cleanLoader = loader.toLowerCase();
+      const isPlugin = ['paper', 'purpur', 'spigot', 'bukkit', 'folia'].includes(cleanLoader);
+      const matchingLoader = files.filter((f) => {
+        const gvLower = (f.gameVersions ?? []).map((g) => g.toLowerCase());
+        const fnLower = f.fileName.toLowerCase();
+        if (isPlugin) {
+          const hasPluginTag = gvLower.some((g) => ['bukkit', 'spigot', 'paper', 'purpur', 'folia'].includes(g)) ||
+            fnLower.includes('bukkit') || fnLower.includes('paper') || fnLower.includes('spigot');
+          const hasOnlyModTag = (fnLower.includes('fabric') || fnLower.includes('neoforge') || fnLower.includes('forge')) && !hasPluginTag;
+          return hasPluginTag || !hasOnlyModTag;
+        }
+        return gvLower.includes(cleanLoader) || fnLower.includes(cleanLoader);
+      });
+      if (matchingLoader.length > 0) {
+        files = matchingLoader;
+      }
+    }
+
     // Optional gameVersion filter with graceful fallback
     if (gameVersion) {
       const matching = files.filter((f) => f.gameVersions?.includes(gameVersion));
@@ -265,13 +285,18 @@ export class CurseForgeProvider implements IContentProvider {
         f.downloadUrl ||
         `https://edge.forgecdn.net/files/${Math.floor(f.id / 1000)}/${f.id % 1000}/${encodeURIComponent(f.fileName)}`;
 
+      const knownLoaders = ['fabric', 'forge', 'neoforge', 'quilt', 'bukkit', 'spigot', 'paper', 'purpur'];
+      const detectedLoaders = (f.gameVersions ?? [])
+        .map((g) => g.toLowerCase())
+        .filter((g) => knownLoaders.includes(g));
+
       return {
         id: String(f.id),
         projectId,
         name: f.displayName,
         versionNumber: String(f.id),
         gameVersions: f.gameVersions ?? [],
-        loaders: [],
+        loaders: detectedLoaders,
         fileName: f.fileName,
         downloadUrl,
         size: f.fileLength,

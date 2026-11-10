@@ -2,6 +2,7 @@ import { getMinecraftAvatarUrl, STEVE_AVATAR_SVG } from '../utils/minecraft-skin
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth, type UserProfile } from '../context/AuthContext.js';
 import { api } from '../services/api-client.js';
+import { useDialog } from '../context/DialogContext.js';
 import type { ServerInstanceData } from '../components/ServerCard.js';
 import {
   Users,
@@ -22,6 +23,7 @@ import {
 
 export const UsersManagementPage: React.FC = () => {
   const { user: currentUser } = useAuth();
+  const { confirm } = useDialog();
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [servers, setServers] = useState<ServerInstanceData[]>([]);
@@ -135,7 +137,13 @@ export const UsersManagementPage: React.FC = () => {
       return;
     }
 
-    if (!confirm(`¿Estás seguro de que deseas eliminar permanentemente a @${targetUser.username}?`)) {
+    const ok = await confirm({
+      title: 'Eliminar Cuenta de Usuario',
+      message: `¿Estás seguro de que deseas eliminar permanentemente al operador @${targetUser.username}?`,
+      confirmLabel: 'Eliminar Cuenta',
+      variant: 'danger'
+    });
+    if (!ok) {
       return;
     }
 

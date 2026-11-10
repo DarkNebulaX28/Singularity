@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Package, Trash2, Box, Layers, Database, Plus, Upload, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { api } from '../services/api-client.js';
+import { useDialog } from '../context/DialogContext.js';
 
 export interface InstalledItemData {
   id: string;
@@ -30,6 +31,7 @@ export const InstalledContentList: React.FC<InstalledContentListProps> = ({
   loader,
   onExploreCatalog
 }) => {
+  const { confirm, alert } = useDialog();
   const [items, setItems] = useState<InstalledItemData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -81,7 +83,13 @@ export const InstalledContentList: React.FC<InstalledContentListProps> = ({
   };
 
   const handleUninstall = async (projectId: string, fileName: string) => {
-    if (!confirm(`¿Desinstalar ${fileName}? Se eliminará el archivo del servidor.`)) {
+    const ok = await confirm({
+      title: 'Desinstalar Contenido',
+      message: `¿Desinstalar "${fileName}"? Se eliminará el archivo del servidor de forma permanente.`,
+      confirmLabel: 'Desinstalar',
+      variant: 'danger'
+    });
+    if (!ok) {
       return;
     }
 
@@ -90,7 +98,11 @@ export const InstalledContentList: React.FC<InstalledContentListProps> = ({
       await api.delete(`/catalog/installed/${serverId}/${projectId}`);
       await fetchInstalled();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Error al desinstalar archivo');
+      await alert({
+        title: 'Error al Desinstalar',
+        message: err instanceof Error ? err.message : 'Error al desinstalar archivo',
+        variant: 'error'
+      });
     } finally {
       setIsDeleting(null);
     }

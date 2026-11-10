@@ -227,7 +227,7 @@ export class ContentInstallerService {
       throw new Error('Nombre de archivo inválido para instalación.');
     }
     const safeDownloadUrl = validateSafeDownloadUrl(request.downloadUrl);
-    const sanitizedRequest: InstallContentRequest = {
+    let sanitizedRequest: InstallContentRequest = {
       ...request,
       fileName: safeFileName,
       downloadUrl: safeDownloadUrl
@@ -236,6 +236,55 @@ export class ContentInstallerService {
     const instanceDir = this.getInstanceDir(sanitizedRequest.instanceId);
     const serverLoader = await this.getInstanceLoader(sanitizedRequest.instanceId);
     const isPluginEngine = Boolean(serverLoader && PLUGIN_LOADERS.has(serverLoader));
+
+    // 1.5 Self-healing guard: if target server is Paper/Purpur/Spigot (Plugin engine)
+    // but the requested fileName is explicitly a Mod loader build (e.g. Chunky-Fabric or Chunky-NeoForge),
+    // automatically resolve the Bukkit/Paper/Spigot plugin build from Modrinth or reject incompatible mod JARs.
+    const fnLower = sanitizedRequest.fileName.toLowerCase();
+    const isExplicitModJar =
+      /(?:^|[-_.])(fabric|neoforge|forge|quilt)(?:[-_.]|\.jar$)/i.test(fnLower) &&
+      !/(bukkit|spigot|paper|purpur|folia)/i.test(fnLower);
+
+    if (isPluginEngine && isExplicitModJar && sanitizedRequest.providerId === 'modrinth') {
+      try {
+        const pluginLoaders = JSON.stringify(['paper', 'purpur', 'spigot', 'bukkit', 'folia']);
+        const resolveUrl = `https://api.modrinth.com/v2/project/${encodeURIComponent(sanitizedRequest.projectId)}/version?loaders=${encodeURIComponent(pluginLoaders)}`;
+        const verRes = await fetch(resolveUrl, {
+          headers: { 'User-Agent': 'NebulaX-Singularity/0.1.0 (contact@nebulaxstudio.top)' }
+        });
+        if (verRes.ok) {
+          const pluginVersions = (await verRes.json()) as Array<{
+            id: string;
+            version_number: string;
+            files: Array<{ url: string; filename: string; primary?: boolean }>;
+          }>;
+          const bestPluginVer = pluginVersions[0];
+          const primaryFile = bestPluginVer?.files?.find((f) => f.primary) ?? bestPluginVer?.files?.[0];
+          if (bestPluginVer && primaryFile?.url && primaryFile?.filename) {
+            sanitizedRequest = {
+              ...sanitizedRequest,
+              versionId: bestPluginVer.id,
+              versionNumber: bestPluginVer.version_number,
+              fileName: path.basename(primaryFile.filename),
+              downloadUrl: validateSafeDownloadUrl(primaryFile.url),
+              projectType: 'plugin'
+            };
+          } else {
+            throw new Error(
+              `El archivo '${sanitizedRequest.fileName}' es un Mod (Fabric/Forge/NeoForge) y este proyecto no dispone de una versión de Plugin compatible con ${serverLoader?.toUpperCase()}.`
+            );
+          }
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes('no dispone de una versión de Plugin')) {
+          throw err;
+        }
+      }
+    } else if (isPluginEngine && isExplicitModJar && !sanitizedRequest.force) {
+      throw new Error(
+        `El archivo '${sanitizedRequest.fileName}' es una versión de Mod (Fabric/Forge/NeoForge) y no puede ejecutarse como Plugin en un servidor ${serverLoader?.toUpperCase()}. Selecciona la edición Bukkit/Paper/Spigot.`
+      );
+    }
 
     // 1. Client-only mod prevention for dedicated servers
     const isModOnModEngine = !isPluginEngine && (sanitizedRequest.projectType === 'mod' || !sanitizedRequest.projectType);

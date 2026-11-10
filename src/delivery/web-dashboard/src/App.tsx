@@ -38,6 +38,8 @@ export const App: React.FC = () => {
 
   // Selected Server for Detail View
   const [selectedServer, setSelectedServer] = useState<ServerInstanceData | null>(null);
+  const [catalogTargetServerId, setCatalogTargetServerId] = useState<string | undefined>(undefined);
+  const [catalogDefaultType, setCatalogDefaultType] = useState<'all' | 'mod' | 'plugin'>('all');
   const [serverCount, setServerCount] = useState<number>(0);
 
   useEffect(() => {
@@ -133,6 +135,11 @@ export const App: React.FC = () => {
                 serverId={selectedServer.id}
                 onBack={() => setSelectedServer(null)}
                 onNavigateToCatalog={() => {
+                  const isPluginLoader = ['paper', 'purpur', 'spigot', 'bukkit'].includes(
+                    selectedServer.loader.toLowerCase()
+                  );
+                  setCatalogTargetServerId(selectedServer.id);
+                  setCatalogDefaultType(isPluginLoader ? 'plugin' : 'mod');
                   setSelectedServer(null);
                   setCurrentTab('catalog');
                 }}
@@ -148,7 +155,10 @@ export const App: React.FC = () => {
           )}
 
           {currentTab === 'catalog' && (
-            <CatalogExplorer />
+            <CatalogExplorer
+              defaultServerId={catalogTargetServerId}
+              defaultProjectType={catalogDefaultType}
+            />
           )}
 
           {currentTab === 'users' && (
