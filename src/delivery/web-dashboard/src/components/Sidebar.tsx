@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Server, Package, Cpu, Settings, Users, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { SingularityLogo } from './SingularityLogo.js';
 
 export type NavTab = 'servers' | 'catalog' | 'java' | 'users' | 'settings';
 
@@ -68,20 +69,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, serve
       <div>
         {/* Brand Header */}
         <div className="h-14 px-3.5 flex items-center justify-between border-b border-nebula-800">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-nebula-950 border border-nebula-accent/40 flex items-center justify-center p-1 shadow-sm shadow-nebula-accent/20 shrink-0">
-              <img src="/favicon.svg" alt="Singularity" className="w-5 h-5 object-contain" />
-            </div>
-            {!collapsed && (
-              <div className="flex flex-col min-w-0">
-                <span className="font-bold tracking-tight text-slate-100 flex items-center gap-1.5 text-sm truncate">
-                  Singularity
-                  <span className="text-[9px] font-mono font-semibold px-1 py-0.2 rounded bg-nebula-800 text-nebula-accent border border-nebula-accent/30">
-                    v0.1.2
-                  </span>
-                </span>
-                <span className="text-[9px] text-slate-500 font-mono tracking-widest">NEBULAX STUDIO</span>
-              </div>
+          <div className="flex items-center min-w-0">
+            {collapsed ? (
+              <SingularityLogo variant="badge" size="sm" animated />
+            ) : (
+              <SingularityLogo
+                variant="lockup"
+                size="sm"
+                animated
+                versionBadge="v0.1.2"
+                subtitle="NEBULAX STUDIO"
+              />
             )}
           </div>
 

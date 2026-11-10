@@ -12,8 +12,9 @@ export default {
           800: '#1a2232',
           750: '#232e42',
           700: '#2e3b52',
-          accent: '#10b981', // Emerald Mission Control
-          cyber: '#06b6d4',  // Cyan telemetry
+          accent: '#10b981', // NebulaX Emerald (Primary Brand Color #1)
+          cyber: '#06b6d4',  // Singularity Cyber Cyan (Primary Brand Color #2)
+          sky: '#38bdf8',    // Horizon Sky Cyan (Primary Brand Color #3)
           warning: '#f59e0b',// Amber alert
           danger: '#ef4444', // Red crash
           purple: '#8b5cf6'  // Prism violet

@@ -20,6 +20,7 @@ import {
 import { useAuth } from '../context/AuthContext.js';
 import { useDialog } from '../context/DialogContext.js';
 import { getMinecraftAvatarUrl, STEVE_AVATAR_SVG } from '../utils/minecraft-skin.js';
+import { SingularityLogo } from '../components/SingularityLogo.js';
 import type { DesktopNotificationConfig, AutoStartSettings } from '../types/desktop.js';
 
 interface SettingsPageProps {
@@ -595,16 +596,41 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenProfileModal }
           </div>
 
           {/* About NebulaX Studio */}
-          <div className="p-4 rounded-2xl bg-nebula-950/60 border border-nebula-800 text-center space-y-2">
-            <div className="flex items-center justify-center gap-2">
-              <img src="/favicon.svg" alt="Singularity" className="w-5 h-5 object-contain" />
-              <span className="text-xs font-bold text-white tracking-wider font-mono">SINGULARITY</span>
-              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-nebula-800 text-nebula-accent border border-nebula-accent/30">
-                v0.1.2-alpha
+          <div className="p-4 rounded-2xl bg-nebula-950/80 border border-nebula-800/80 text-center space-y-3 relative overflow-hidden">
+            <div className="flex items-center justify-center">
+              <SingularityLogo
+                variant="lockup"
+                size="sm"
+                animated
+                versionBadge="v0.1.2-alpha"
+                subtitle="NebulaX Studio · Orbital Voxel Edition"
+              />
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <span
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-nebula-900 border border-nebula-800 text-[9px] font-mono text-slate-300"
+                title="Horizon Sky (#38BDF8) — Voxel Crown & Quantum Core"
+              >
+                <span className="w-2 h-2 rounded-full bg-[#38BDF8] shadow-[0_0_6px_#38BDF8]" />
+                #38BDF8
+              </span>
+              <span
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-nebula-900 border border-nebula-800 text-[9px] font-mono text-slate-300"
+                title="Singularity Cyber Cyan (#06B6D4) — Event Horizon Primary"
+              >
+                <span className="w-2 h-2 rounded-full bg-[#06B6D4] shadow-[0_0_6px_#06B6D4]" />
+                #06B6D4
+              </span>
+              <span
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-nebula-900 border border-nebula-800 text-[9px] font-mono text-slate-300"
+                title="NebulaX Emerald (#10B981) — Telemetry & Isometric Shadow"
+              >
+                <span className="w-2 h-2 rounded-full bg-[#10B981] shadow-[0_0_6px_#10B981]" />
+                #10B981
               </span>
             </div>
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              Un producto oficial de <strong>NebulaX Studio</strong> & <strong>Xavier Aimacaña</strong>.
+              Un producto oficial de <strong className="text-slate-200">NebulaX Studio</strong> & <strong className="text-slate-200">Xavier Aimacaña</strong>.
             </p>
             <span className="text-[10px] text-slate-500 font-mono block">
               Bajo Licencia MIT (Open Source 2026)

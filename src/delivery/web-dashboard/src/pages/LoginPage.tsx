@@ -22,6 +22,7 @@ import {
   WifiOff
 } from 'lucide-react';
 import { ConnectionSwitcherModal } from '../components/ConnectionSwitcherModal.js';
+import { SingularityLogo } from '../components/SingularityLogo.js';
 import type { ServerConnectionProfile } from '../types/desktop.js';
 
 export interface LoginPageProps {
@@ -173,7 +174,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       <header className="relative z-10 w-full border-b border-nebula-800/80 bg-nebula-950/80 backdrop-blur-md px-4 sm:px-8 py-3 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <img src="/favicon.svg" alt="Singularity" className="w-5 h-5 object-contain" />
+            <SingularityLogo variant="symbol" size="xs" animated />
             <span className="font-bold tracking-wider text-white">SINGULARITY</span>
             <span className="text-slate-600">//</span>
             <span className="text-[11px] text-nebula-accent font-semibold">NEBULAX STUDIO</span>
@@ -246,14 +247,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           <div className="lg:col-span-7 space-y-6 order-2 lg:order-1">
             {/* Hero Title Block */}
             <div className="space-y-3">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-nebula-accent/10 border border-nebula-accent/30 text-nebula-accent text-[11px] font-mono font-semibold uppercase tracking-wider">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Orquestador de Servidores Minecraft de Nueva Generación</span>
+              <div className="flex flex-wrap items-center gap-3">
+                <SingularityLogo variant="badge" size="lg" animated />
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-nebula-accent/10 border border-nebula-accent/30 text-nebula-accent text-[11px] font-mono font-semibold uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Orquestador de Servidores Minecraft de Nueva Generación</span>
+                </div>
               </div>
 
               <h1 className="text-3xl sm:text-4xl lg:text-[2.65rem] font-black tracking-tight text-white leading-[1.08]">
                 Control Total para tu Infraestructura{' '}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-nebula-accent via-emerald-400 to-nebula-cyber">
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-nebula-sky via-nebula-cyber to-nebula-accent">
                   Local y Cloud 24/7
                 </span>
               </h1>
