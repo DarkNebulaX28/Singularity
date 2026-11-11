@@ -1,17 +1,74 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="singularity-logo-title">
-  <title id="singularity-logo-title">Singularity — NebulaX Studio</title>
-  <g id="symbol">
-    <!-- Upper-Left Orbital Event Horizon Arm (Cyber Cyan) -->
-    <path d="M 31.00 133.00 L 31.00 72.00 L 128.00 16.00 L 225.00 72.00 L 225.00 105.00 L 200.75 119.00 L 200.75 86.00 L 128.00 44.00 L 55.25 86.00 L 55.25 119.00 Z" fill="#06B6D4" />
-    <!-- Lower-Right Orbital Event Horizon Arm (NebulaX Emerald) -->
-    <path d="M 225.00 123.00 L 225.00 184.00 L 128.00 240.00 L 31.00 184.00 L 31.00 151.00 L 55.25 137.00 L 55.25 170.00 L 128.00 212.00 L 200.75 170.00 L 200.75 137.00 Z" fill="#10B981" />
-    <!-- Voxel Crown Facet (Horizon Sky Cyan) -->
-    <path d="M 128.00 67.00 L 176.50 95.00 L 146.19 112.50 L 128.00 102.00 L 109.81 112.50 L 79.50 95.00 Z" fill="#38BDF8" />
-    <!-- Voxel Left Facet (Cyber Cyan) -->
-    <path d="M 75.17 102.50 L 105.48 120.00 L 105.48 141.00 L 123.67 151.50 L 123.67 186.50 L 75.17 158.50 Z" fill="#06B6D4" />
-    <!-- Voxel Right Facet (NebulaX Emerald) -->
-    <path d="M 180.83 102.50 L 180.83 158.50 L 132.33 186.50 L 132.33 151.50 L 150.52 141.00 L 150.52 120.00 Z" fill="#10B981" />
-    <!-- Central Singularity Quantum Core (Horizon Sky Cyan) -->
-    <path d="M 128.00 113.50 L 140.56 120.75 L 140.56 135.25 L 128.00 142.50 L 115.44 135.25 L 115.44 120.75 Z" fill="#38BDF8" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Singularity — Small-Size Optical Mark">
+  <defs>
+    <filter id="sg-small-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <linearGradient id="sg-sm-plate" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="sg-sm-top" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe" />
+      <stop offset="100%" stop-color="#00f0ff" />
+    </linearGradient>
+    <linearGradient id="sg-sm-left" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f5d0fe" />
+      <stop offset="100%" stop-color="#9333ea" />
+    </linearGradient>
+    <linearGradient id="sg-sm-right" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a7f3d0" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+  </defs>
+
+  <!-- Heavy Outer Armored Hull (6 Thick Plates) -->
+  <g id="sm-plates" stroke-linejoin="round">
+    <!-- Top Left -->
+    <path d="M 244,48 L 76,146 L 76,210 L 116,186 L 116,168 L 244,92 Z" fill="url(#sg-sm-plate)" stroke="#00f0ff" stroke-width="6" />
+    <!-- Top Right -->
+    <path d="M 268,48 L 268,92 L 396,168 L 396,186 L 436,210 L 436,146 Z" fill="url(#sg-sm-plate)" stroke="#00f0ff" stroke-width="6" />
+    <!-- East Flange -->
+    <path d="M 450,230 L 406,206 L 406,306 L 450,282 Z" fill="url(#sg-sm-plate)" stroke="#d946ef" stroke-width="6" />
+    <!-- Bottom Right -->
+    <path d="M 436,302 L 396,326 L 396,344 L 268,420 L 268,464 L 436,366 Z" fill="url(#sg-sm-plate)" stroke="#00ff88" stroke-width="6" />
+    <!-- Bottom Left -->
+    <path d="M 244,464 L 244,420 L 116,344 L 116,326 L 76,302 L 76,366 Z" fill="url(#sg-sm-plate)" stroke="#00ff88" stroke-width="6" />
+    <!-- West Flange -->
+    <path d="M 62,230 L 106,206 L 106,306 L 62,282 Z" fill="url(#sg-sm-plate)" stroke="#d946ef" stroke-width="6" />
+  </g>
+
+  <!-- Central Quantum Voxel Core (High Optical Clarity) -->
+  <g id="sm-voxel-core" stroke-linejoin="round">
+    <!-- Top Facet (Diamond) -->
+    <polygon points="256,150 348,202 256,256 164,202" fill="url(#sg-sm-top)" stroke="#ffffff" stroke-width="5" />
+    <!-- Left Facet (Nether) -->
+    <polygon points="164,202 256,256 256,362 164,310" fill="url(#sg-sm-left)" stroke="#f5d0fe" stroke-width="5" />
+    <!-- Right Facet (Emerald) -->
+    <polygon points="256,256 348,202 348,310 256,362" fill="url(#sg-sm-right)" stroke="#a7f3d0" stroke-width="5" />
+
+    <!-- Center Gravitational Eye -->
+    <polygon points="256,224 284,240 284,272 256,288 228,272 228,240" fill="#020617" stroke="#00f0ff" stroke-width="5" />
+    <circle cx="256" cy="256" r="14" fill="#ffffff" filter="url(#sg-small-glow)" />
+    <circle cx="256" cy="256" r="6" fill="#00f0ff" />
+  </g>
+
+  <!-- 6 Large Orbiting Mineral Gems (Scale boosted for 16px/32px recognition) -->
+  <g id="sm-minerals" filter="url(#sg-small-glow)">
+    <!-- 1. Diamond (Top Right) -->
+    <circle cx="416" cy="120" r="18" fill="#00f0ff" stroke="#ffffff" stroke-width="4" />
+    <!-- 2. Amethyst (West) -->
+    <circle cx="92" cy="170" r="16" fill="#d946ef" stroke="#ffffff" stroke-width="4" />
+    <!-- 3. Emerald (Bottom Right) -->
+    <circle cx="420" cy="380" r="18" fill="#00ff88" stroke="#ffffff" stroke-width="4" />
+    <!-- 4. Gold (Bottom Left) -->
+    <circle cx="120" cy="404" r="16" fill="#fbbf24" stroke="#ffffff" stroke-width="4" />
+    <!-- 5. Redstone (Top Left) -->
+    <circle cx="128" cy="100" r="16" fill="#f43f5e" stroke="#ffffff" stroke-width="4" />
+    <!-- 6. Lapis (South) -->
+    <circle cx="256" cy="450" r="15" fill="#38bdf8" stroke="#ffffff" stroke-width="4" />
   </g>
 </svg>

@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <title>Singularity - The Kinetic Horizon (Concept B)</title>
-  <!-- Upper Orbital Wing -->
-  <path d="M 64,124 C 64,74.3 104.3,34 154,34 C 176,34 192,42 192,42 L 180,66 C 180,66 168,60 154,60 C 118.7,60 90,88.7 90,124 Z" fill="#090d16" />
-  <!-- Lower Orbital Wing -->
-  <path d="M 192,132 C 192,181.7 151.7,222 102,222 C 80,222 64,214 64,214 L 76,190 C 76,190 88,196 102,196 C 137.3,196 166,167.3 166,132 Z" fill="#090d16" />
-  <!-- Central Singularity Core -->
-  <polygon points="128,108 145.32,118 145.32,138 128,148 110.68,138 110.68,118" fill="#090d16" />
-</svg>

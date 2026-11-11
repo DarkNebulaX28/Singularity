@@ -1,14 +1,15 @@
 <div align="center">
 
-<img src="docs/assets/logo.png" alt="Singularity Logo" width="240" />
+<img src="docs/assets/logo.png" alt="Singularity Logo — NebulaX Studio" width="520" />
 
 # 🌌 Singularity
 ### *The Next-Generation Minecraft Server Orchestrator & Mission Control*
 **Un producto oficial de NebulaX Studio**
 
-[![Version](https://img.shields.io/badge/version-0.1.1--alpha-blueviolet.svg?style=for-the-badge)](https://github.com/DarkNebulaX28/Singularity/releases/tag/v0.1.1-alpha)
-[![Release](https://img.shields.io/github/v/release/DarkNebulaX28/Singularity?include_prereleases&style=for-the-badge&color=8b5cf6&label=Release)](https://github.com/DarkNebulaX28/Singularity/releases/tag/v0.1.1-alpha)
-[![Tests Passing](https://img.shields.io/badge/tests-135%20passing-10b981.svg?style=for-the-badge)](https://github.com/DarkNebulaX28/Singularity)
+[![Version](https://img.shields.io/badge/version-0.1.3--alpha-blueviolet.svg?style=for-the-badge)](https://github.com/DarkNebulaX28/Singularity/releases/tag/v0.1.3-alpha)
+[![Release](https://img.shields.io/github/v/release/DarkNebulaX28/Singularity?include_prereleases&style=for-the-badge&color=8b5cf6&label=Release)](https://github.com/DarkNebulaX28/Singularity/releases/tag/v0.1.3-alpha)
+[![Tests Passing](https://img.shields.io/badge/tests-147%20passing-10b981.svg?style=for-the-badge)](https://github.com/DarkNebulaX28/Singularity)
+[![Brand](https://img.shields.io/badge/Brand%20Kit-Master%20v2.0-00f0ff.svg?style=for-the-badge)](docs/BRAND_GUIDELINES.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-24+-339933.svg?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Fastify](https://img.shields.io/badge/Fastify-5.x-000000.svg?style=for-the-badge&logo=fastify&logoColor=white)](https://fastify.dev/)
@@ -337,6 +338,7 @@ npm run build
 
 ## 📑 Documentación Técnica
 
+* 🌌 [Manual Oficial de Identidad de Marca (Brand Kit & Guidelines)](docs/BRAND_GUIDELINES.md)
 * 🗺️ [Mapa de Capacidades del Sistema](docs/CAPABILITY_MAP.md)
 * 📐 [Especificación Técnica Completa](docs/superpowers/specs/2026-10-30-pismcontroller-design.md)
 * 📋 [Plan de Implementación Detallado (16 Tareas)](docs/superpowers/plans/2026-10-30-pismcontroller-implementation.md)

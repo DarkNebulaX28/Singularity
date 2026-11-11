@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" width="1200" height="360" role="img" aria-label="Singularity — Horizontal Lockup (White)">
+  <title>Singularity — Horizontal Lockup (White)</title>
+  <defs>
+    
+  </defs>
+
+  <!-- Left: Symbol Mark (Size 300x300, offset X=40, Y=30) -->
+  <g transform="translate(40, 30) scale(0.5859375)">
+    
+  <!-- Outer Hull -->
+  <g fill="#ffffff" stroke="#ffffff" stroke-linejoin="round">
+    <path d="M 244,42 L 68,144 C 64,146 61,151 61,156 L 61,212 L 108,185 L 108,164 L 244,85 Z" fill-opacity="0.12" stroke-width="2.5" />
+    <path d="M 268,42 L 268,85 L 404,164 L 404,185 L 451,212 L 451,156 C 451,151 448,146 444,144 Z" fill-opacity="0.12" stroke-width="2.5" />
+    <path d="M 462,234 L 416,207 L 416,305 L 462,278 C 466,276 469,271 469,266 L 469,246 C 469,241 466,236 462,234 Z" fill-opacity="0.12" stroke-width="2.5" />
+    <path d="M 451,300 L 404,327 L 404,348 L 268,427 L 268,470 L 444,368 C 448,366 451,361 451,356 Z" fill-opacity="0.12" stroke-width="2.5" />
+    <path d="M 244,470 L 244,427 L 108,348 L 108,327 L 61,300 L 61,356 C 61,361 64,366 68,368 Z" fill-opacity="0.12" stroke-width="2.5" />
+    <path d="M 50,234 C 46,236 43,241 43,246 L 43,266 C 43,271 46,276 50,278 L 96,305 L 96,207 Z" fill-opacity="0.12" stroke-width="2.5" />
+  </g>
+
+  <!-- Orbital Rings -->
+  <g fill="none" stroke="#ffffff" stroke-width="2">
+    <ellipse cx="256" cy="256" rx="180" ry="76" stroke-opacity="0.4" stroke-dasharray="24 12" transform="rotate(-30 256 256)" />
+    <ellipse cx="256" cy="256" rx="172" ry="68" stroke-opacity="0.3" stroke-dasharray="30 14" transform="rotate(40 256 256)" />
+  </g>
+
+  <!-- Central Voxel Core -->
+  <g stroke="#ffffff" stroke-linejoin="round">
+    <!-- Top Face -->
+    <polygon points="256,160 339.14,208 256,256 172.86,208" fill="#ffffff" fill-opacity="0.9" stroke-width="2.5" />
+    <!-- Left Face -->
+    <polygon points="172.86,208 256,256 256,352 172.86,304" fill="#ffffff" fill-opacity="0.5" stroke-width="2.5" />
+    <!-- Right Face -->
+    <polygon points="256,256 339.14,208 339.14,304 256,352" fill="#ffffff" fill-opacity="0.3" stroke-width="2.5" />
+
+    <!-- Center Aperture -->
+    <polygon points="256,230 278.52,243 278.52,269 256,282 233.48,269 233.48,243" fill="#020617" stroke="#ffffff" stroke-width="2" />
+    <circle cx="256" cy="256" r="8" fill="#ffffff" />
+    
+    <!-- Star Flare -->
+    <polygon points="256,238 258.5,256 256,274 253.5,256" fill="#ffffff" />
+    <polygon points="238,256 256,258.5 274,256 256,253.5" fill="#ffffff" />
+  </g>
+
+  <!-- 6 Orbiting Mineral Voxels -->
+  <g fill="#ffffff" stroke="#ffffff">
+    <!-- Diamond -->
+    <polygon points="404,116 422,126 404,137 386,126" fill-opacity="0.9" />
+    <polygon points="386,126 404,137 404,157 386,147" fill-opacity="0.5" />
+    <polygon points="404,137 422,126 422,147 404,157" fill-opacity="0.3" />
+    <!-- Amethyst -->
+    <polygon points="98,163 113,171 98,180 83,171" fill-opacity="0.9" />
+    <polygon points="83,171 98,180 98,197 83,188" fill-opacity="0.5" />
+    <polygon points="98,180 113,171 113,188 98,197" fill-opacity="0.3" />
+    <!-- Emerald -->
+    <polygon points="412,346 428,355 412,364 396,355" fill-opacity="0.9" />
+    <polygon points="396,355 412,364 412,383 396,373" fill-opacity="0.5" />
+    <polygon points="412,364 428,355 428,373 412,383" fill-opacity="0.3" />
+    <!-- Gold -->
+    <polygon points="132,383 145,390 132,398 119,390" fill-opacity="0.9" />
+    <polygon points="119,390 132,398 132,413 119,405" fill-opacity="0.5" />
+    <polygon points="132,398 145,390 145,405 132,413" fill-opacity="0.3" />
+    <!-- Redstone -->
+    <polygon points="138,103 149,109 138,115 127,109" fill-opacity="0.9" />
+    <polygon points="127,109 138,115 138,128 127,122" fill-opacity="0.5" />
+    <polygon points="138,115 149,109 149,122 138,128" fill-opacity="0.3" />
+    <!-- Lapis -->
+    <polygon points="256,432 266,437 256,443 246,437" fill-opacity="0.9" />
+    <polygon points="246,437 256,443 256,455 246,449" fill-opacity="0.5" />
+    <polygon points="256,443 266,437 266,449 256,455" fill-opacity="0.3" />
+  </g>
+
+  </g>
+
+  <!-- Right: Official Typography Group (X=380) -->
+  <g transform="translate(380, 0)">
+    <!-- Primary Title: SINGULARITY -->
+    <text x="0" y="152" fill="#ffffff" font-family="'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, 'Montserrat', sans-serif" font-size="74" font-weight="900" letter-spacing="0.14em">SINGULARITY</text>
+    
+    <!-- Version Pill Tag -->
+    <g transform="translate(680, 104)">
+      <rect x="0" y="0" width="86" height="32" rx="6" fill="#020617" stroke="#ffffff" stroke-width="1.5" />
+      <text x="43" y="21" fill="#ffffff" font-family="'Segoe UI', -apple-system, sans-serif" font-size="13" font-weight="800" text-anchor="middle" letter-spacing="0.05em">v2.0 PRO</text>
+    </g>
+
+    <!-- Sub-Brand: NEBULAX STUDIO (Crisp, perfectly proportioned) -->
+    <text x="4" y="214" fill="#ffffff" font-family="'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="800" letter-spacing="0.36em">NEBULAX STUDIO</text>
+    
+    <!-- Cyber Accent Divider Line -->
+    <line x1="4" y1="242" x2="740" y2="242" stroke="#ffffff" stroke-width="2" stroke-opacity="0.35" stroke-dasharray="14 8" />
+
+    <!-- Tagline: QUANTUM MINECRAFT RUNTIME & ORCHESTRATOR -->
+    <text x="4" y="278" fill="#cbd5e1" font-family="'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif" font-size="15" font-weight="600" letter-spacing="0.22em">QUANTUM MINECRAFT RUNTIME &amp; ORCHESTRATOR</text>
+  </g>
+</svg>

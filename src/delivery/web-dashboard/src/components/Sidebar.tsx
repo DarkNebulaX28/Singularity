@@ -77,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, serve
                 variant="lockup"
                 size="sm"
                 animated
-                versionBadge="v0.1.2"
+                versionBadge="v0.1.3"
                 subtitle="NEBULAX STUDIO"
               />
             )}

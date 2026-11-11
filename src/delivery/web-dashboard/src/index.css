@@ -55,11 +55,15 @@
     scrollbar-width: none;
   }
 
-  /* Singularity Brand Logo Stagger & Orbital Pulse (with reduced-motion guard) */
-  @keyframes singularity-piece-in {
+  /* ======================================================== */
+  /* SINGULARITY CINEMATIC QUANTUM LOGO ANIMATION SYSTEM     */
+  /* ======================================================== */
+
+  /* Keyframe: Staggered Build-on for Armor Plates */
+  @keyframes sg-plate-assemble {
     0% {
       opacity: 0;
-      transform: scale(0.86);
+      transform: scale(1.14);
     }
     100% {
       opacity: 1;
@@ -67,38 +71,223 @@
     }
   }
 
-  @keyframes singularity-core-pulse {
+  /* Keyframe: Ambient Breathing for Voxel Core */
+  @keyframes sg-voxel-breathe {
     0%, 100% {
       transform: scale(1);
-      filter: drop-shadow(0 0 0px rgba(56, 189, 248, 0));
     }
     50% {
-      transform: scale(1.06);
-      filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.55));
+      transform: scale(1.025);
     }
   }
 
-  .singularity-logo-animated .sg-piece {
-    transform-origin: 128px 128px;
-    animation: singularity-piece-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  /* Keyframe: Pulsing Singularity White Dwarf Core */
+  @keyframes sg-singularity-heartbeat {
+    0%, 100% {
+      transform: scale(1);
+      filter: drop-shadow(0 0 2px rgba(0, 240, 255, 0.4));
+      opacity: 0.95;
+    }
+    50% {
+      transform: scale(1.22);
+      filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.95)) drop-shadow(0 0 16px rgba(255, 255, 255, 0.8));
+      opacity: 1;
+    }
   }
 
-  .singularity-logo-animated .sg-piece-1 { animation-delay: 0.04s; }
-  .singularity-logo-animated .sg-piece-2 { animation-delay: 0.10s; }
-  .singularity-logo-animated .sg-piece-3 { animation-delay: 0.16s; }
-  .singularity-logo-animated .sg-piece-4 { animation-delay: 0.22s; }
-  .singularity-logo-animated .sg-piece-5 { animation-delay: 0.28s; }
-  .singularity-logo-animated .sg-core {
-    transform-origin: 128px 128px;
-    animation:
-      singularity-piece-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.34s backwards,
-      singularity-core-pulse 3.6s ease-in-out 1.1s infinite;
+  /* Keyframe: 8-Point Cosmic Star Flare Cosmic Rotation */
+  @keyframes sg-star-rotate {
+    0% {
+      transform: rotate(0deg);
+      opacity: 0.85;
+    }
+    50% {
+      opacity: 1;
+      transform: rotate(180deg) scale(1.08);
+    }
+    100% {
+      transform: rotate(360deg);
+      opacity: 0.85;
+    }
   }
 
+  /* Keyframe: Gyroscopic Particle Accelerator Relativistic Flow */
+  @keyframes sg-gyro-stream-forward {
+    0% {
+      stroke-dashoffset: 0;
+    }
+    100% {
+      stroke-dashoffset: -180;
+    }
+  }
+
+  @keyframes sg-gyro-stream-reverse {
+    0% {
+      stroke-dashoffset: 0;
+    }
+    100% {
+      stroke-dashoffset: 150;
+    }
+  }
+
+  /* Keyframe: Beacon Laser Beam Radiant Flux */
+  @keyframes sg-beacon-flux {
+    0%, 100% {
+      opacity: 0.35;
+      stroke-dashoffset: 0;
+    }
+    50% {
+      opacity: 0.75;
+      stroke-dashoffset: -40;
+    }
+  }
+
+  /* Keyframe: Zero-G Orbital Mineral Floating */
+  @keyframes sg-mineral-drift-1 {
+    0%, 100% { transform: translate(404px, 134px) translateY(0px); }
+    50% { transform: translate(404px, 134px) translateY(-3px) scale(1.04); }
+  }
+  @keyframes sg-mineral-drift-2 {
+    0%, 100% { transform: translate(98px, 178px) translateY(0px); }
+    50% { transform: translate(98px, 178px) translateY(2.5px) scale(1.03); }
+  }
+  @keyframes sg-mineral-drift-3 {
+    0%, 100% { transform: translate(412px, 362px) translateY(0px); }
+    50% { transform: translate(412px, 362px) translateY(-2.5px) scale(1.03); }
+  }
+  @keyframes sg-mineral-drift-4 {
+    0%, 100% { transform: translate(132px, 396px) translateY(0px); }
+    50% { transform: translate(132px, 396px) translateY(3px) scale(1.04); }
+  }
+  @keyframes sg-redstone-clock {
+    0%, 100% {
+      transform: translate(138px, 114px) scale(1);
+      filter: drop-shadow(0 0 0px rgba(244, 63, 94, 0));
+    }
+    20% {
+      transform: translate(138px, 114px) scale(1.12);
+      filter: drop-shadow(0 0 8px rgba(244, 63, 94, 0.9));
+    }
+    40% {
+      transform: translate(138px, 114px) scale(1);
+    }
+  }
+  @keyframes sg-mineral-drift-6 {
+    0%, 100% { transform: translate(256px, 442px) translateY(0px); }
+    50% { transform: translate(256px, 442px) translateY(-2px) scale(1.02); }
+  }
+
+  /* Keyframe: Nether Rift Lightning & Emerald Matrix Telemetry Pulse */
+  @keyframes sg-rift-spark {
+    0%, 100% { opacity: 0.4; }
+    25% { opacity: 1; }
+    30% { opacity: 0.3; }
+    60% { opacity: 0.9; }
+    85% { opacity: 0.5; }
+  }
+  @keyframes sg-telemetry-pulse {
+    0%, 100% { opacity: 0.5; filter: drop-shadow(0 0 0px #00ff88); }
+    50% { opacity: 1; filter: drop-shadow(0 0 6px #00ff88); }
+  }
+
+  /* Keyframe: Armor Dissipation Thermal Breathing */
+  @keyframes sg-thermal-exhaust {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; filter: drop-shadow(0 0 4px #d946ef); }
+  }
+
+  /* --- APPLIED SELECTORS --- */
+
+  /* Assembly & Stagger */
+  .singularity-logo-animated .sg-anim-hull .sg-anim-plate {
+    transform-origin: 256px 256px;
+    animation: sg-plate-assemble 0.65s cubic-bezier(0.18, 0.89, 0.32, 1.28) backwards;
+  }
+  .singularity-logo-animated .sg-anim-plate-1 { animation-delay: 0.04s; }
+  .singularity-logo-animated .sg-anim-plate-2 { animation-delay: 0.10s; }
+  .singularity-logo-animated .sg-anim-plate-3 { animation-delay: 0.16s; }
+  .singularity-logo-animated .sg-anim-plate-4 { animation-delay: 0.22s; }
+  .singularity-logo-animated .sg-anim-plate-5 { animation-delay: 0.28s; }
+  .singularity-logo-animated .sg-anim-plate-6 { animation-delay: 0.34s; }
+
+  /* Voxel Core Breathing */
+  .singularity-logo-animated .sg-anim-voxel-core {
+    transform-origin: 256px 256px;
+    animation: sg-voxel-breathe 4.2s ease-in-out infinite;
+  }
+
+  /* Continuous Gyroscopic Particle Accelerators */
+  .singularity-logo-animated .sg-anim-gyro-1 {
+    animation: sg-gyro-stream-forward 3.6s linear infinite;
+  }
+  .singularity-logo-animated .sg-anim-gyro-2 {
+    animation: sg-gyro-stream-reverse 4.5s linear infinite;
+  }
+
+  /* Cosmic Singularity & Flare */
+  .singularity-logo-animated .sg-anim-singularity-core {
+    transform-origin: 256px 256px;
+    animation: sg-singularity-heartbeat 2.6s ease-in-out infinite;
+  }
+  .singularity-logo-animated .sg-anim-star-flare {
+    transform-origin: 256px 256px;
+    animation: sg-star-rotate 16s linear infinite;
+  }
+
+  /* Beacon & Plasma Flux */
+  .singularity-logo-animated .sg-anim-beacon {
+    animation: sg-beacon-flux 3.2s ease-in-out infinite;
+  }
+  .singularity-logo-animated .sg-anim-beacon-line {
+    animation: sg-beacon-flux 2.8s ease-in-out infinite;
+  }
+
+  /* Floating Mineral Levitation (Zero-G Physics) */
+  .singularity-logo-animated .sg-anim-min-diamond {
+    animation: sg-mineral-drift-1 3.4s ease-in-out infinite;
+  }
+  .singularity-logo-animated .sg-anim-min-amethyst {
+    animation: sg-mineral-drift-2 3.8s ease-in-out infinite;
+  }
+  .singularity-logo-animated .sg-anim-min-emerald {
+    animation: sg-mineral-drift-3 3.6s ease-in-out infinite;
+  }
+  .singularity-logo-animated .sg-anim-min-gold {
+    animation: sg-mineral-drift-4 4.0s ease-in-out infinite;
+  }
+  .singularity-logo-animated .sg-anim-min-redstone {
+    animation: sg-redstone-clock 1.0s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  .singularity-logo-animated .sg-anim-min-lapis {
+    animation: sg-mineral-drift-6 4.2s ease-in-out infinite;
+  }
+
+  /* Internal Core FX */
+  .singularity-logo-animated .sg-anim-rift-lightning {
+    animation: sg-rift-spark 1.8s steps(2, start) infinite;
+  }
+  .singularity-logo-animated .sg-anim-circuit-node {
+    animation: sg-telemetry-pulse 2.2s ease-in-out infinite;
+  }
+  .singularity-logo-animated .sg-anim-exhaust {
+    animation: sg-thermal-exhaust 3.0s ease-in-out infinite;
+  }
+
+  /* Interactive Quantum Surge on Badge Hover */
+  .group:hover .singularity-logo-animated .sg-anim-gyro-1,
+  div:hover > .singularity-logo-animated .sg-anim-gyro-1 {
+    animation-duration: 1.2s;
+  }
+  .group:hover .singularity-logo-animated .sg-anim-star-flare,
+  div:hover > .singularity-logo-animated .sg-anim-star-flare {
+    animation-duration: 5s;
+  }
+
+  /* Reduced Motion Accessibility Guard */
   @media (prefers-reduced-motion: reduce) {
-    .singularity-logo-animated .sg-piece,
-    .singularity-logo-animated .sg-core {
+    .singularity-logo-animated * {
       animation: none !important;
+      transition: none !important;
       opacity: 1 !important;
       transform: none !important;
     }

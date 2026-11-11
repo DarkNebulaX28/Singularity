@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Singularity — Monochrome Black">
+  <!-- Outer Hull -->
+  <g fill="#0f172a" stroke="#0f172a" stroke-linejoin="round">
+    <path d="M 244,42 L 68,144 C 64,146 61,151 61,156 L 61,212 L 108,185 L 108,164 L 244,85 Z" fill-opacity="0.12" stroke-width="2.5" />
+    <path d="M 268,42 L 268,85 L 404,164 L 404,185 L 451,212 L 451,156 C 451,151 448,146 444,144 Z" fill-opacity="0.12" stroke-width="2.5" />
+    <path d="M 462,234 L 416,207 L 416,305 L 462,278 C 466,276 469,271 469,266 L 469,246 C 469,241 466,236 462,234 Z" fill-opacity="0.12" stroke-width="2.5" />
+    <path d="M 451,300 L 404,327 L 404,348 L 268,427 L 268,470 L 444,368 C 448,366 451,361 451,356 Z" fill-opacity="0.12" stroke-width="2.5" />
+    <path d="M 244,470 L 244,427 L 108,348 L 108,327 L 61,300 L 61,356 C 61,361 64,366 68,368 Z" fill-opacity="0.12" stroke-width="2.5" />
+    <path d="M 50,234 C 46,236 43,241 43,246 L 43,266 C 43,271 46,276 50,278 L 96,305 L 96,207 Z" fill-opacity="0.12" stroke-width="2.5" />
+  </g>
+
+  <!-- Orbital Rings -->
+  <g fill="none" stroke="#0f172a" stroke-width="2">
+    <ellipse cx="256" cy="256" rx="180" ry="76" stroke-opacity="0.4" stroke-dasharray="24 12" transform="rotate(-30 256 256)" />
+    <ellipse cx="256" cy="256" rx="172" ry="68" stroke-opacity="0.3" stroke-dasharray="30 14" transform="rotate(40 256 256)" />
+  </g>
+
+  <!-- Central Voxel Core -->
+  <g stroke="#0f172a" stroke-linejoin="round">
+    <!-- Top Face -->
+    <polygon points="256,160 339.14,208 256,256 172.86,208" fill="#0f172a" fill-opacity="0.9" stroke-width="2.5" />
+    <!-- Left Face -->
+    <polygon points="172.86,208 256,256 256,352 172.86,304" fill="#0f172a" fill-opacity="0.5" stroke-width="2.5" />
+    <!-- Right Face -->
+    <polygon points="256,256 339.14,208 339.14,304 256,352" fill="#0f172a" fill-opacity="0.3" stroke-width="2.5" />
+
+    <!-- Center Aperture -->
+    <polygon points="256,230 278.52,243 278.52,269 256,282 233.48,269 233.48,243" fill="#ffffff" stroke="#0f172a" stroke-width="2" />
+    <circle cx="256" cy="256" r="8" fill="#0f172a" />
+    
+    <!-- Star Flare -->
+    <polygon points="256,238 258.5,256 256,274 253.5,256" fill="#0f172a" />
+    <polygon points="238,256 256,258.5 274,256 256,253.5" fill="#0f172a" />
+  </g>
+
+  <!-- 6 Orbiting Mineral Voxels -->
+  <g fill="#0f172a" stroke="#0f172a">
+    <!-- Diamond -->
+    <polygon points="404,116 422,126 404,137 386,126" fill-opacity="0.9" />
+    <polygon points="386,126 404,137 404,157 386,147" fill-opacity="0.5" />
+    <polygon points="404,137 422,126 422,147 404,157" fill-opacity="0.3" />
+    <!-- Amethyst -->
+    <polygon points="98,163 113,171 98,180 83,171" fill-opacity="0.9" />
+    <polygon points="83,171 98,180 98,197 83,188" fill-opacity="0.5" />
+    <polygon points="98,180 113,171 113,188 98,197" fill-opacity="0.3" />
+    <!-- Emerald -->
+    <polygon points="412,346 428,355 412,364 396,355" fill-opacity="0.9" />
+    <polygon points="396,355 412,364 412,383 396,373" fill-opacity="0.5" />
+    <polygon points="412,364 428,355 428,373 412,383" fill-opacity="0.3" />
+    <!-- Gold -->
+    <polygon points="132,383 145,390 132,398 119,390" fill-opacity="0.9" />
+    <polygon points="119,390 132,398 132,413 119,405" fill-opacity="0.5" />
+    <polygon points="132,398 145,390 145,405 132,413" fill-opacity="0.3" />
+    <!-- Redstone -->
+    <polygon points="138,103 149,109 138,115 127,109" fill-opacity="0.9" />
+    <polygon points="127,109 138,115 138,128 127,122" fill-opacity="0.5" />
+    <polygon points="138,115 149,109 149,122 138,128" fill-opacity="0.3" />
+    <!-- Lapis -->
+    <polygon points="256,432 266,437 256,443 246,437" fill-opacity="0.9" />
+    <polygon points="246,437 256,443 256,455 246,449" fill-opacity="0.5" />
+    <polygon points="256,443 266,437 266,449 256,455" fill-opacity="0.3" />
+  </g>
+</svg>

@@ -602,7 +602,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenProfileModal }
                 variant="lockup"
                 size="sm"
                 animated
-                versionBadge="v0.1.2-alpha"
+                versionBadge="v0.1.3-alpha"
                 subtitle="NebulaX Studio · Orbital Voxel Edition"
               />
             </div>

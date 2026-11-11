@@ -34,6 +34,9 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Singularity
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
   artifactName: Singularity-Setup-${version}.${ext}
   uninstallDisplayName: Singularity Minecraft Server Mission Control
 
